@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:15
+    container_name: rustdesk-db
+    restart: always
+    environment:
+      - POSTGRES_USER=rustdesk
+      - POSTGRES_PASSWORD=rustdesk
+      - POSTGRES_DB=rustdesk_monitor  # Убедитесь, что имя базы совпадает с DSN
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rustdesk -d rustdesk_monitor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rustdesk-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rustdesk-monitor:
+    build: .
+    container_name: rustdesk-monitor
+    restart: always
+    ports:
+      - "21114:21114"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - TZ=Europe/Moscow
+      - DB_DSN=postgresql://rustdesk:rustdesk@db:5432/rustdesk_monitor
+      - SECRET_KEY=your-secret-key-change-this-in-production
+    volumes:
+      - ./static:/app/static
+      - ./data:/data
+    networks:
+      - rustdesk-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  rustdesk-network:
+    driver: bridge

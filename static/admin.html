@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Светогорский ЦБК | Панель управления</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        .sortable:hover {
+            background: #00332B !important;
+        }
+        .sortable i {
+            margin-left: 5px;
+            font-size: 0.7rem;
+            opacity: 0.7;
+        }
+        .sortable.asc i {
+            opacity: 1;
+        }
+        .sortable.desc i {
+            opacity: 1;
+            transform: rotate(180deg);
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            margin: 2px;
+        }
+        .btn-warning {
+            background: #FFC700;
+            color: #004D43;
+        }
+        .btn-warning:hover {
+            background: #e6b300;
+        }
+        .action-cell {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body class="pattern-bg">
+    <div class="monitor-container">
+        <div class="app-card">
+            <div class="app-header">
+                <div class="header-content">
+                    <div class="logo-section">
+                        <div class="logo-icon"><i class="fas fa-tree"></i></div>
+                        <div class="logo-text">
+                            <h1>НПАО «Светогорский ЦБК»</h1>
+                            <p>Панель управления системой мониторинга</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav-bar">
+                <div class="nav-links">
+                    <a href="/">📊 Мониторинг</a>
+                    <a href="/admin">⚙️ Управление</a>
+                    <a href="#" onclick="logout()">🚪 Выход</a>
+                </div>
+            </div>
+
+            <!-- Пользователи -->
+            <div class="search-panel">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <h3 style="color: #004D43;">👥 Пользователи</h3>
+                    <button class="btn btn-primary" id="addUserBtn">➕ Добавить пользователя</button>
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="computers-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Логин</th>
+                            <th>Роль</th>
+                            <th>Email</th>
+                            <th>Создан</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <tr><td colspan="6" class="empty-state">Загрузка...</td</tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Устройства -->
+            <div class="search-panel">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <h3 style="color: #004D43;">🖥️ Устройства</h3>
+                    <div class="search-input-wrapper" style="width: 300px;">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchDevices" class="search-input" placeholder="Поиск устройств...">
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table class="computers-table">
+                    <thead>
+                        <tr>
+                            <th>Имя устройства</th>
+                            <th>ID</th>
+                            <th>Пользователь</th>
+                            <th>IP</th>
+                            <th>Статус</th>
+                            <th class="sortable" data-sort="last_contact" id="sortHeader">
+                                Последний контакт <i class="fas fa-sort"></i>
+                            </th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devicesTableBody">
+                        <tr><td colspan="7" class="empty-state">Загрузка...</td</tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно добавления пользователя -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>➕ Добавить пользователя</h3>
+                <span class="close">&times;</span>
+            </div>
+            <form id="addUserForm">
+                <div class="form-group">
+                    <label>Логин *</label>
+                    <input type="text" id="newUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>Пароль *</label>
+                    <input type="password" id="newPassword" required>
+                </div>
+                <div class="form-group">
+                    <label>Роль</label>
+                    <select id="newRole">
+                        <option value="user">Пользователь</option>
+                        <option value="admin">Администратор</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="newEmail">
+                </div>
+                <button type="submit" class="btn btn-primary">Создать</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно смены пароля -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔑 Смена пароля</h3>
+                <span class="close-password-modal">&times;</span>
+            </div>
+            <form id="passwordForm">
+                <div class="form-group">
+                    <label>Пользователь</label>
+                    <input type="text" id="passwordUser" disabled style="background: #f5f5f5;">
+                </div>
+                <div class="form-group">
+                    <label>Новый пароль *</label>
+                    <input type="password" id="newPasswordField" required minlength="4">
+                    <span style="font-size: 0.7rem; color: #666;">Минимум 4 символа</span>
+                </div>
+                <div class="form-group">
+                    <label>Подтверждение пароля *</label>
+                    <input type="password" id="confirmPasswordField" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Сменить пароль</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="toast-notification">
+        <i class="fas fa-info-circle"></i>
+        <span id="toastMessage"></span>
+    </div>
+
+    <script>
+        let allDevices = [];
+        let currentSort = {
+            column: 'last_contact',
+            direction: 'desc'
+        };
+        let currentUserId = null;
+
+        // ========== УПРАВЛЕНИЕ СЕССИЕЙ ==========
+        let sessionCheckInterval = null;
+        let activityTimeout = null;
+
+        async function checkSession() {
+            try {
+                const response = await fetch('/api/session/check');
+                const data = await response.json();
+                if (!data.active) {
+                    showToast('⚠️ Сессия истекла. Войдите снова.', false);
+                    setTimeout(() => window.location.href = '/login', 2000);
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                return true;
+            }
+        }
+
+        async function extendSession() {
+            try {
+                await fetch('/api/session/extend', { method: 'POST' });
+            } catch (error) {}
+        }
+
+        function updateActivity() {
+            extendSession();
+            if (activityTimeout) clearTimeout(activityTimeout);
+            activityTimeout = setTimeout(() => checkSession(), 120000);
+        }
+
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (error) {}
+            window.location.href = '/login';
+        }
+
+        document.addEventListener('click', updateActivity);
+        document.addEventListener('keypress', updateActivity);
+        document.addEventListener('mousemove', updateActivity);
+        document.addEventListener('scroll', updateActivity);
+
+        if (sessionCheckInterval) clearInterval(sessionCheckInterval);
+        sessionCheckInterval = setInterval(async () => {
+            const isActive = await checkSession();
+            if (!isActive) clearInterval(sessionCheckInterval);
+        }, 60000);
+
+        // ========== ФУНКЦИИ СОРТИРОВКИ ==========
+        
+        function formatDateForSort(dateString) {
+            if (!dateString) return new Date(0);
+            return new Date(dateString);
+        }
+
+        function sortDevices(devices) {
+            const devicesCopy = [...devices];
+            
+            devicesCopy.sort((a, b) => {
+                let aValue, bValue;
+                
+                if (currentSort.column === 'last_contact') {
+                    aValue = a.last_online ? new Date(a.last_online) : new Date(0);
+                    bValue = b.last_online ? new Date(b.last_online) : new Date(0);
+                } else {
+                    return 0;
+                }
+                
+                if (currentSort.direction === 'asc') {
+                    return aValue - bValue;
+                } else {
+                    return bValue - aValue;
+                }
+            });
+            
+            return devicesCopy;
+        }
+
+        function updateSortIcon() {
+            const header = document.getElementById('sortHeader');
+            header.classList.remove('asc', 'desc');
+            if (currentSort.direction === 'asc') {
+                header.classList.add('asc');
+                header.querySelector('i').className = 'fas fa-sort-up';
+            } else {
+                header.classList.add('desc');
+                header.querySelector('i').className = 'fas fa-sort-down';
+            }
+        }
+
+        function setSort(column) {
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = 'desc';
+            }
+            updateSortIcon();
+            filterAndDisplayDevices();
+        }
+
+        // ========== УВЕДОМЛЕНИЯ ==========
+        
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const icon = toast.querySelector('i');
+
+            toastMessage.textContent = message;
+
+            if (isError) {
+                icon.className = 'fas fa-exclamation-triangle';
+                toast.style.background = '#c62828';
+            } else {
+                icon.className = 'fas fa-check-circle';
+                toast.style.background = '#004D43';
+            }
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ========== ФОРМАТИРОВАНИЕ ==========
+        
+        function formatDate(dateString) {
+            if (!dateString) return 'Никогда';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffSeconds = Math.floor((now - date) / 1000);
+            if (diffSeconds < 60) return `${diffSeconds} сек назад`;
+            if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} мин назад`;
+            return date.toLocaleString('ru-RU');
+        }
+
+        function isOnline(lastOnline) {
+            if (!lastOnline) return false;
+            return (new Date() - new Date(lastOnline)) < 30000;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // ========== ЗАГРУЗКА ПОЛЬЗОВАТЕЛЕЙ ==========
+        
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users');
+                if (response.ok) {
+                    const users = await response.json();
+                    const tbody = document.getElementById('usersTableBody');
+                    if (users.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Нет пользователей</td</tr>';
+                        return;
+                    }
+                    tbody.innerHTML = users.map(user => `
+                        <tr>
+                            <td>${user.id}</td>
+                            <td><strong>${escapeHtml(user.username)}</strong></td>
+                            <td><span style="background: #004D43; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">${user.role === 'admin' ? 'Админ' : 'Пользователь'}</span></td>
+                            <td>${escapeHtml(user.email || '-')}</td>
+                            <td>${formatDate(user.created_at)}</td>
+                            <td>
+                                <div class="action-cell">
+                                    <button class="btn btn-warning btn-sm" onclick="openPasswordModal(${user.id}, '${escapeHtml(user.username)}')">
+                                        🔑 Сменить пароль
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id}, '${escapeHtml(user.username)}')">
+                                        Удалить
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+            }
+        }
+
+        // ========== МОДАЛЬНОЕ ОКНО СМЕНЫ ПАРОЛЯ ==========
+        
+        function openPasswordModal(userId, username) {
+            currentUserId = userId;
+            document.getElementById('passwordUser').value = username;
+            document.getElementById('newPasswordField').value = '';
+            document.getElementById('confirmPasswordField').value = '';
+            document.getElementById('passwordModal').classList.add('active');
+        }
+
+        document.querySelector('.close-password-modal').onclick = () => {
+            document.getElementById('passwordModal').classList.remove('active');
+        };
+
+        // Закрытие модального окна при клике вне его
+        window.onclick = (e) => {
+            const passwordModal = document.getElementById('passwordModal');
+            const userModal = document.getElementById('userModal');
+            if (e.target === passwordModal) passwordModal.classList.remove('active');
+            if (e.target === userModal) userModal.classList.remove('active');
+        };
+
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const newPassword = document.getElementById('newPasswordField').value;
+            const confirmPassword = document.getElementById('confirmPasswordField').value;
+            
+            if (newPassword.length < 4) {
+                showToast('❌ Пароль должен быть минимум 4 символа', true);
+                return;
+            }
+            
+            if (newPassword !== confirmPassword) {
+                showToast('❌ Пароли не совпадают', true);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/users/${currentUserId}/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_password: newPassword })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showToast(`✅ ${data.message}`);
+                    document.getElementById('passwordModal').classList.remove('active');
+                    loadUsers();
+                } else {
+                    showToast(`❌ ${data.error || 'Ошибка смены пароля'}`, true);
+                }
+            } catch (error) {
+                showToast('❌ Ошибка смены пароля', true);
+            }
+        });
+
+        // ========== ЗАГРУЗКА УСТРОЙСТВ ==========
+        
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/computers');
+                if (response.ok) {
+                    allDevices = await response.json();
+                    filterAndDisplayDevices();
+                }
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+
+        function filterAndDisplayDevices() {
+            const searchTerm = document.getElementById('searchDevices').value.toLowerCase();
+            let filtered = allDevices.filter(d => 
+                (d.hostname || '').toLowerCase().includes(searchTerm) ||
+                (d.id || '').toLowerCase().includes(searchTerm) ||
+                (d.username || '').toLowerCase().includes(searchTerm)
+            );
+            
+            const sorted = sortDevices(filtered);
+            
+            const tbody = document.getElementById('devicesTableBody');
+            if (sorted.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Нет устройств</td</tr>';
+                return;
+            }
+
+            tbody.innerHTML = sorted.map(device => {
+                const online = isOnline(device.last_online);
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(device.hostname || 'Unknown')}</strong></td>
+                        <td><code>${escapeHtml(device.id || '-')}</code></td>
+                        <td>${escapeHtml(device.username || 'Unknown')}</td>
+                        <td>${escapeHtml(device.ip || 'N/A')}</td>
+                        <td><span style="color: ${online ? '#28a745' : '#dc3545'}">${online ? '🟢 Онлайн' : '🔴 Оффлайн'}</span></td>
+                        <td>${formatDate(device.last_online)}</td>
+                        <td><button class="btn btn-danger btn-sm" onclick="deleteDevice('${device.uuid}', '${escapeHtml(device.hostname)}')">Удалить</button></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ========== УДАЛЕНИЕ ==========
+        
+        async function deleteUser(userId, username) {
+            if (confirm(`Удалить пользователя "${username}"?`)) {
+                try {
+                    const response = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+                    if (response.ok) {
+                        showToast(`✅ Пользователь "${username}" удален`);
+                        loadUsers();
+                    } else {
+                        showToast('❌ Ошибка удаления', true);
+                    }
+                } catch (error) {
+                    showToast('❌ Ошибка удаления', true);
+                }
+            }
+        }
+
+        async function deleteDevice(uuid, hostname) {
+            if (confirm(`Удалить устройство "${hostname}"?`)) {
+                try {
+                    const response = await fetch(`/api/computers/${uuid}`, { method: 'DELETE' });
+                    if (response.ok) {
+                        showToast(`✅ Устройство "${hostname}" удалено`);
+                        loadDevices();
+                    } else {
+                        showToast('❌ Ошибка удаления', true);
+                    }
+                } catch (error) {
+                    showToast('❌ Ошибка удаления', true);
+                }
+            }
+        }
+
+        // ========== МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯ ==========
+        
+        const modal = document.getElementById('userModal');
+        document.getElementById('addUserBtn').onclick = () => modal.classList.add('active');
+        document.querySelector('.close').onclick = () => modal.classList.remove('active');
+
+        document.getElementById('addUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userData = {
+                username: document.getElementById('newUsername').value,
+                password: document.getElementById('newPassword').value,
+                role: document.getElementById('newRole').value,
+                email: document.getElementById('newEmail').value
+            };
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(userData)
+                });
+                if (response.ok) {
+                    showToast(`✅ Пользователь "${userData.username}" создан`);
+                    modal.classList.remove('active');
+                    document.getElementById('addUserForm').reset();
+                    loadUsers();
+                } else {
+                    const error = await response.json();
+                    showToast(`❌ ${error.error || 'Ошибка создания'}`, true);
+                }
+            } catch (error) {
+                showToast('❌ Ошибка создания', true);
+            }
+        });
+
+        // ========== ОБРАБОТЧИКИ ==========
+        
+        document.getElementById('searchDevices').addEventListener('input', () => {
+            filterAndDisplayDevices();
+        });
+
+        document.getElementById('sortHeader').addEventListener('click', () => {
+            setSort('last_contact');
+        });
+        
+        // ========== ИНИЦИАЛИЗАЦИЯ ==========
+        
+        loadUsers();
+        loadDevices();
+        setInterval(loadDevices, 15000);
+    </script>
+</body>
+</html>

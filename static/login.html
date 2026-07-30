@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Светогорский ЦБК | Вход в систему</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .login-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .login-card {
+            background: white;
+            max-width: 400px;
+            width: 100%;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-header i {
+            font-size: 48px;
+            color: #004D43;
+            margin-bottom: 10px;
+        }
+        .login-header h1 {
+            color: #004D43;
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+        }
+        .login-header p {
+            color: #666;
+            font-size: 0.8rem;
+        }
+        .error-message {
+            background: #FFEBEE;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            display: none;
+            font-size: 0.85rem;
+        }
+        .info {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.7rem;
+            color: #999;
+        }
+        .btn-login {
+            width: 100%;
+            background: #004D43;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-login:hover {
+            background: #00332B;
+        }
+    </style>
+</head>
+<body class="pattern-bg">
+    <div class="login-wrapper">
+        <div class="app-card login-card">
+            <div class="card-body" style="padding: 40px;">
+                <div class="login-header">
+                    <i class="fas fa-tree"></i>
+                    <h1>НПАО «Светогорский ЦБК»</h1>
+                    <p>Вход в систему мониторинга</p>
+                </div>
+                <div class="error-message" id="errorMsg">Неверный логин или пароль</div>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label>Логин</label>
+                        <input type="text" id="username" required autofocus>
+                    </div>
+                    <div class="form-group">
+                        <label>Пароль</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <button type="submit" class="btn-login">Войти</button>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.role === 'admin') {
+                        window.location.href = '/admin';
+                    } else {
+                        window.location.href = '/';
+                    }
+                } else {
+                    document.getElementById('errorMsg').style.display = 'block';
+                }
+            } catch (error) {
+                document.getElementById('errorMsg').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>

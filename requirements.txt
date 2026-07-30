@@ -1,0 +1,6 @@
+Flask==2.3.3
+psycopg2-binary==2.9.9  # Или psycopg2 для production
+flask-socketio==5.3.4
+python-socketio==5.9.0
+eventlet==0.33.3
+openpyxl==3.1.2
