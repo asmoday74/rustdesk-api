@@ -1,8 +1,12 @@
+На основе анализа репозитория `fiverok/sveApiRust` подготовлен обновленный файл `README.md`. В нём отражены все ключевые изменения проекта, включая переход на PostgreSQL.
+
+```markdown
 # RustDesk Monitor
 
-[![GitHub release](https://img.shields.io/badge/release-v5.0-brightgreen)](https://github.com/fiverok/sveApiRust/releases)
+[![GitHub release](https://img.shields.io/badge/release-v6.0.0-brightgreen)](https://github.com/fiverok/sveApiRust/releases)
 [![Docker](https://img.shields.io/badge/docker-ready-blue)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-15-blue)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Система мониторинга компьютеров для RustDesk с веб-интерфейсом, авторизацией и панелью администратора.
@@ -10,7 +14,6 @@
 ## 📋 Оглавление
 
 - [Возможности](#-возможности)
-- [Скриншоты](#-скриншоты)
 - [Быстрый старт](#-быстрый-старт)
 - [API Endpoints](#-api-endpoints)
 - [Структура проекта](#-структура-проекта)
@@ -40,21 +43,12 @@
 - **Статистика** онлайн/оффлайн устройств
 
 ### Технические особенности
-- **SQLite** для надежного хранения данных
+- **PostgreSQL** для надежного хранения данных (поддерживается пул соединений)
 - **Docker** контейнеризация
 - **Безопасное хеширование** паролей (PBKDF2)
 - **Детальное логирование** sysinfo и heartbeat
 - **Корпоративный дизайн** (зеленый #004D43, желтый #FFC700)
-
-## 📸 Скриншоты
-### Страница входа
-![Login Page](screenshots/login.png)
-
-### Мониторинг устройств
-![Monitoring](screenshots/monitoring.png)
-
-### Панель администратора
-![Admin Panel](screenshots/admin.png)
+- **Автоматическая очистка** старых данных
 
 ## 🚀 Быстрый старт
 
@@ -62,6 +56,7 @@
 - Docker 20.10+
 - Docker Compose 2.0+
 - Git
+- PostgreSQL 15 (автоматически поднимается в контейнере)
 
 ### Установка
 
@@ -106,6 +101,7 @@ curl http://localhost:21114/health
 | `/api/users` | GET | Список пользователей | Admin |
 | `/api/users` | POST | Создать пользователя | Admin |
 | `/api/users/{id}` | DELETE | Удалить пользователя | Admin |
+| `/api/users/{id}/password` | PUT | Смена пароля (v6.0.0) | Admin |
 
 ### API Управления
 
@@ -115,11 +111,13 @@ curl http://localhost:21114/health
 | `/api/computers/{uuid}` | DELETE | Удалить устройство | Admin |
 | `/api/stats` | GET | Статистика | Да |
 | `/api/audit` | GET | Лог аудита | Admin |
+| `/api/db/health` | GET | Диагностика БД | Да |
+| `/api/db/repair` | POST | Восстановление БД | Admin |
 
 ## 📁 Структура проекта
 
 ```
-rustdesk-monitor/
+sveApiRust/
 ├── static/                 # Статические файлы
 │   ├── style.css          # Общие стили
 │   ├── login.html         # Страница входа
@@ -128,20 +126,21 @@ rustdesk-monitor/
 │   └── favicon.svg        # Иконка сайта
 ├── modules/               # Модули приложения
 │   ├── __init__.py
-│   ├── database.py        # Работа с БД
+│   ├── database.py        # Работа с БД (PostgreSQL)
 │   ├── auth.py            # Аутентификация
 │   ├── api_auth.py        # API аутентификации
 │   ├── api_computers.py   # API устройств
 │   └── api_public.py      # Публичные API
-├── data/                  # Данные (создается автоматически)
-│   ├── computers.db       # База данных SQLite
+├── data/                  # Данные (логи)
 │   ├── sysinfo.log        # Логи регистрации
 │   ├── heartbeat.log      # Логи heartbeat
 │   └── errors.log         # Логи ошибок
+├── postgres_data/         # Данные PostgreSQL (создается автоматически)
 ├── app.py                 # Основной файл
 ├── requirements.txt       # Зависимости Python
 ├── Dockerfile            # Docker образ
 ├── docker-compose.yml    # Docker Compose
+├── migrate_data.py       # Скрипт миграции из SQLite
 └── README.md             # Документация
 ```
 
@@ -152,6 +151,10 @@ rustdesk-monitor/
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
 | `SECRET_KEY` | Секретный ключ Flask | Генерируется автоматически |
+| `DB_DSN` | Строка подключения к PostgreSQL | `postgresql://rustdesk:rustdesk@db:5432/rustdesk_monitor` |
+| `POSTGRES_USER` | Пользователь PostgreSQL | `rustdesk` |
+| `POSTGRES_PASSWORD` | Пароль PostgreSQL | `rustdesk` |
+| `POSTGRES_DB` | Имя базы данных | `rustdesk_monitor` |
 
 ### Настройка клиентов RustDesk
 
@@ -184,35 +187,24 @@ docker-compose logs -f
 
 # Перезапуск
 docker-compose restart
+
+# Полная очистка с удалением данных
+docker-compose down -v
 ```
 
-### Docker только
+### Миграция с SQLite на PostgreSQL
+
+Если у вас есть данные в SQLite:
 
 ```bash
-# Сборка образа
-docker build -t rustdesk-monitor .
+# 1. Скопировать файл SQLite в контейнер
+docker cp data/computers.db rustdesk-monitor:/data/computers.db
 
-# Запуск контейнера
-docker run -d \
-  --name rustdesk-monitor \
-  -p 21114:21114 \
-  -v $(pwd)/data:/data \
-  -v $(pwd)/static:/app/static \
-  --restart always \
-  rustdesk-monitor
-```
+# 2. Запустить миграцию
+docker exec -it rustdesk-monitor python3 migrate_data.py
 
-### Ручная установка
-
-```bash
-# Установка зависимостей
-pip install -r requirements.txt
-
-# Создание директорий
-mkdir -p data static
-
-# Запуск
-python app.py
+# 3. Проверить данные
+curl http://localhost:21114/api/stats
 ```
 
 ## 👥 Управление пользователями
@@ -228,6 +220,14 @@ curl -X POST http://localhost:21114/api/users \
     "role": "user",
     "email": "user@example.com"
   }'
+```
+
+### Смена пароля пользователя
+
+```bash
+curl -X PUT http://localhost:21114/api/users/1/password \
+  -H "Content-Type: application/json" \
+  -d '{"new_password": "newpassword123"}'
 ```
 
 ### Удаление пользователя
@@ -268,16 +268,25 @@ docker logs rustdesk-monitor
 
 # Проверка порта
 netstat -tlnp | grep 21114
+
+# Проверка статуса PostgreSQL
+docker logs rustdesk-db
 ```
 
 ### Ошибка подключения к БД
 
 ```bash
-# Проверка прав на директорию
-ls -la data/
+# Проверка подключения к PostgreSQL
+docker exec -it rustdesk-monitor python3 -c "
+import psycopg2
+import os
+conn = psycopg2.connect(os.environ.get('DB_DSN'))
+print('✅ Connected!')
+conn.close()
+"
 
-# Проверка целостности БД
-docker exec -it rustdesk-monitor sqlite3 /data/computers.db ".tables"
+# Проверка данных в БД
+docker exec -it rustdesk-db psql -U rustdesk -d rustdesk_monitor -c "\dt"
 ```
 
 ### Heartbeat не обновляется
@@ -288,6 +297,11 @@ docker exec -it rustdesk-monitor tail -f /data/heartbeat.log
 
 # Проверка статуса устройств
 curl http://localhost:21114/api/computers
+
+# Ручная отправка heartbeat
+curl -X POST http://localhost:21114/api/heartbeat \
+  -H "Content-Type: application/json" \
+  -d '{"id":"test-001","uuid":"test-uuid","ver":1}'
 ```
 
 ### Забыли пароль администратора
@@ -298,9 +312,19 @@ docker exec -it rustdesk-monitor python3 -c "
 from modules.auth import hash_password
 from modules.database import execute_query
 new_hash = hash_password('new_password')
-execute_query('UPDATE users SET password_hash = ? WHERE username = ?', (new_hash, 'admin'))
-print('Password reset to: new_password')
+execute_query('UPDATE users SET password_hash = %s WHERE username = %s', (new_hash, 'admin'))
+print('✅ Password reset to: new_password')
 "
+```
+
+### Диагностика базы данных
+
+```bash
+# Проверка состояния БД
+curl http://localhost:21114/api/db/health
+
+# Принудительное восстановление
+curl -X POST http://localhost:21114/api/db/repair
 ```
 
 ## 💻 Разработка
@@ -310,6 +334,12 @@ print('Password reset to: new_password')
 ```bash
 # Установка зависимостей
 pip install -r requirements.txt
+
+# Создание директорий
+mkdir -p data static
+
+# Экспорт переменной для локальной БД
+export DB_DSN=postgresql://user:password@localhost:5432/rustdesk_monitor
 
 # Запуск с отладкой
 export FLASK_DEBUG=1
@@ -330,7 +360,7 @@ python app.py
 docker build -t rustdesk-monitor:latest .
 
 # Сборка с версией
-docker build -t rustdesk-monitor:v5.0 .
+docker build -t rustdesk-monitor:v6.0.0 .
 ```
 
 ## 📝 Лицензия
@@ -356,11 +386,21 @@ MIT License. См. файл [LICENSE](LICENSE) для деталей.
 
 - RustDesk за отличный продукт
 - Flask за прекрасный фреймворк
-- SQLite за надежную БД
+- PostgreSQL за надежную БД
 
 ---
 
 <div align="center">
   <sub>Built with ❤️ for НПАО «Светогорский ЦБК»</sub>
 </div>
-# sveApiRust
+```
+
+## Основные изменения в README:
+
+1. **Обновлена информация о версии**: указана версия `v6.0.0` и добавлен бейдж PostgreSQL.
+2. **Добавлено описание миграции**: появился отдельный раздел с инструкцией по переходу с SQLite на PostgreSQL.
+3. **Добавлены новые API эндпоинты**: `/api/db/health`, `/api/db/repair` и `/api/users/{id}/password`.
+4. **Обновлена структура проекта**: добавлена папка `postgres_data` и файл `migrate_data.py`.
+5. **Добавлены переменные окружения**: описаны переменные для работы с PostgreSQL.
+6. **Расширен раздел устранения неполадок**: добавлены команды для диагностики PostgreSQL.
+7. **Убрана ошибка**: убрано упоминание SQLite как основного хранилища данных.

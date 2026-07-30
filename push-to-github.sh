@@ -1,103 +1,127 @@
 #!/bin/bash
 
-echo "🚀 Подготовка к выгрузке на GitHub..."
-echo "======================================"
+# quick-commit.sh - Скрипт для быстрого коммита изменений
+# Использование: ./quick-commit.sh "Сообщение коммита"
 
-# Проверяем наличие изменений
-if [[ -z $(git status -s) ]]; then
-    echo "❌ Нет изменений для коммита."
+# Цвета для вывода
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Функция для вывода справки
+show_help() {
+    echo -e "${BLUE}Использование:${NC}"
+    echo "  ./quick-commit.sh \"Сообщение коммита\""
+    echo ""
+    echo -e "${BLUE}Примеры:${NC}"
+    echo "  ./quick-commit.sh \"fix: исправлена ошибка авторизации\""
+    echo "  ./quick-commit.sh \"feat: добавлена новая функция\""
+    echo ""
+    echo -e "${BLUE}Типы коммитов:${NC}"
+    echo "  feat     - Новая функциональность"
+    echo "  fix      - Исправление ошибки"
+    echo "  docs     - Изменения в документации"
+    echo "  style    - Форматирование кода"
+    echo "  refactor - Рефакторинг"
+    echo "  perf     - Улучшение производительности"
+    echo "  test     - Добавление/изменение тестов"
+    echo "  chore    - Обслуживание (зависимости, конфиги)"
+}
+
+# Проверка аргументов
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+    exit 0
+fi
+
+# Проверяем, есть ли сообщение коммита
+if [ -z "$1" ]; then
+    echo -e "${RED}❌ Ошибка: не указано сообщение коммита${NC}"
+    echo "Использование: ./quick-commit.sh \"Сообщение коммита\""
+    echo "Для справки: ./quick-commit.sh --help"
     exit 1
 fi
 
-echo "📝 Изменения для коммита:"
+COMMIT_MESSAGE="$1"
+
+# Проверяем, что мы в Git репозитории
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+    echo -e "${RED}❌ Ошибка: не в Git репозитории${NC}"
+    exit 1
+fi
+
+# Проверяем, есть ли изменения
+if [[ -z $(git status -s) ]]; then
+    echo -e "${YELLOW}⚠️  Нет изменений для коммита${NC}"
+    exit 0
+fi
+
+echo -e "${BLUE}📝 Текущие изменения:${NC}"
 git status -s
 echo ""
 
-# Добавляем все изменения
-echo "📦 Добавляем файлы..."
-git add .
+# Показываем список измененных файлов
+echo -e "${BLUE}📄 Измененные файлы:${NC}"
+git diff --name-only
+echo ""
 
-# Создаем коммит
-echo "📝 Создаем коммит..."
-git commit -m "feat: переход с SQLite на PostgreSQL и исправление timestamp
+# Спрашиваем, нужно ли добавить все файлы
+echo -e "${YELLOW}Добавить все файлы? (y/n) [y]:${NC} "
+read -r add_all
 
-Основные изменения:
-
-1. База данных:
-   - Полный переход с SQLite на PostgreSQL
-   - Добавлен сервис PostgreSQL в docker-compose.yml
-   - Настроен пул соединений с БД (min=1, max=20)
-   - Добавлены индексы для ускорения запросов
-
-2. Миграция данных:
-   - Создан скрипт migrate_data.py для переноса данных из SQLite
-   - Поддержка миграции таблиц: computers, users, audit_log
-   - Автоматическое преобразование timestamp
-
-3. Исправление timestamp:
-   - Пересчет last_online_timestamp из last_online для всех записей
-   - Исправлены отрицательные значения diff_seconds
-   - Корректное отображение времени последнего контакта
-
-4. Зависимости:
-   - Добавлен psycopg2-binary для работы с PostgreSQL
-   - Обновлены версии в requirements.txt
-
-5. Документация:
-   - Обновлен README.md с описанием PostgreSQL
-   - Добавлены инструкции по миграции
-
-6. Исправление отображения:
-   - Форматирование даты в admin.html
-   - Корректный статус ONLINE/OFFLINE
-   - Отображение diff_seconds
-
-Файлы:
-- modules/database.py (переписан под PostgreSQL)
-- modules/__init__.py (обновлен)
-- app.py (добавлены эндпоинты для диагностики БД)
-- docker-compose.yml (добавлен сервис db)
-- Dockerfile (установлен postgresql-client)
-- requirements.txt (добавлен psycopg2-binary)
-- migrate_data.py (скрипт миграции)
-- fix_timestamps.py (скрипт исправления timestamp)
-- static/admin.html (исправлен formatDate)
-- README.md (обновлена документация)
-"
-
-# Проверяем наличие remote
-if ! git remote | grep -q origin; then
-    echo "➕ Добавляем remote origin..."
-    git remote add origin https://github.com/fiverok/sveApiRust.git
+if [[ "$add_all" =~ ^[Nn]$ ]]; then
+    echo -e "${YELLOW}Добавьте файлы вручную:${NC}"
+    echo "  git add <file1> <file2> ..."
+    echo "  Затем запустите скрипт снова"
+    exit 0
 fi
 
-# Отправляем изменения
-echo "⬆️ Отправляем на GitHub..."
-git push -u origin main 2>/dev/null || git push -u origin master
+# Добавляем все изменения
+echo -e "${BLUE}📦 Добавляем файлы...${NC}"
+git add .
 
-# Создаем тег
-echo "🏷️ Создаем тег v6.0.0"
-git tag -a v6.0.0 -m "Версия 6.0.0: Переход на PostgreSQL
+# Проверяем, есть ли что коммитить
+if git diff --cached --quiet; then
+    echo -e "${YELLOW}⚠️  Нет файлов для коммита (возможно, все в .gitignore)${NC}"
+    exit 0
+fi
 
-- Полный переход с SQLite на PostgreSQL
-- Миграция данных из SQLite
-- Исправление timestamp и статусов
-- Улучшение производительности
-- Оптимизация работы с БД через пул соединений"
+# Создаем коммит
+echo -e "${BLUE}📝 Создаем коммит...${NC}"
+git commit -m "$COMMIT_MESSAGE"
 
-git push origin v6.0.0
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ Коммит создан успешно!${NC}"
+    
+    # Проверяем настройки remote
+    if git remote | grep -q origin; then
+        echo -e "${BLUE}⬆️ Отправить изменения на GitHub? (y/n) [y]:${NC} "
+        read -r push_changes
+        
+        if [[ ! "$push_changes" =~ ^[Nn]$ ]]; then
+            echo -e "${BLUE}⬆️ Отправляем на GitHub...${NC}"
+            git push
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✅ Изменения отправлены на GitHub!${NC}"
+            else
+                echo -e "${RED}❌ Ошибка при отправке на GitHub${NC}"
+            fi
+        else
+            echo -e "${YELLOW}⏸️  Изменения сохранены локально, push отменен${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Remote 'origin' не настроен.${NC}"
+        echo "Добавьте remote: git remote add origin https://github.com/fiverok/sveApiRust.git"
+    fi
+else
+    echo -e "${RED}❌ Ошибка при создании коммита${NC}"
+    exit 1
+fi
 
+# Показываем последние коммиты
 echo ""
-echo "✅ Готово! Изменения выгружены на GitHub"
-echo "🔗 Репозиторий: https://github.com/fiverok/sveApiRust"
-echo "🏷️ Тег: v6.0.0"
-echo ""
-echo "📊 Статистика:"
-echo "   - Всего коммитов: $(git rev-list --count HEAD)"
-echo "   - Размер репозитория: $(du -sh .git | cut -f1)"
-echo ""
-echo "📝 Что нового в v6.0.0:"
-echo "   - PostgreSQL вместо SQLite"
-echo "   - Исправлены timestamp"
-echo "   - Корректное отображение статусов"
-echo "   - Улучшена производительность БД"
+echo -e "${BLUE}📊 Последние коммиты:${NC}"
+git log --oneline -3
