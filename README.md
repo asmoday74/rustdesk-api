@@ -1,5 +1,3 @@
-На основе анализа репозитория `fiverok/sveApiRust` подготовлен обновленный файл `README.md`. В нём отражены все ключевые изменения проекта, включая переход на PostgreSQL.
-
 ```markdown
 # RustDesk Monitor
 
