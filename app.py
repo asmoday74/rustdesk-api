@@ -24,13 +24,13 @@ date_format = '%Y-%m-%d %H:%M:%S'
 os.makedirs('/data', exist_ok=True)
 
 sysinfo_logger = logging.getLogger('sysinfo')
-sysinfo_logger.setLevel(logging.INFO)
+sysinfo_logger.setLevel(logging.ERROR)
 sysinfo_handler = RotatingFileHandler('/data/sysinfo.log', maxBytes=10485760, backupCount=10)
 sysinfo_handler.setFormatter(logging.Formatter(log_format, date_format))
 sysinfo_logger.addHandler(sysinfo_handler)
 
 heartbeat_logger = logging.getLogger('heartbeat')
-heartbeat_logger.setLevel(logging.INFO)
+heartbeat_logger.setLevel(logging.ERROR)
 heartbeat_handler = RotatingFileHandler('/data/heartbeat.log', maxBytes=10485760, backupCount=10)
 heartbeat_handler.setFormatter(logging.Formatter(log_format, date_format))
 heartbeat_logger.addHandler(heartbeat_handler)
