@@ -8,6 +8,108 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Стили для иконки информации - темно-зеленая */
+        .info-trigger {
+            cursor: pointer;
+            color: #004D43;
+            margin-right: 8px;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+            display: inline-block;
+            padding: 4px;
+            order: -1; /* Размещаем слева */
+        }
+        .info-trigger:hover {
+            color: #FFC700;
+            transform: scale(1.1);
+        }
+        .info-trigger.active {
+            color: #FFC700;
+        }
+
+        /* Стили для тултипа - плавающее окно */
+        .floating-tooltip {
+            display: none;
+            position: fixed;
+            background: rgba(0, 77, 67, 0.97);
+            color: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-family: 'Arial', sans-serif;
+            min-width: 260px;
+            max-width: 340px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            z-index: 99999;
+            text-align: left;
+            border: 1px solid rgba(255, 199, 0, 0.3);
+            line-height: 1.8;
+            pointer-events: auto;
+            backdrop-filter: blur(10px);
+            transition: opacity 0.15s ease;
+        }
+        .floating-tooltip.show {
+            display: block;
+        }
+        .floating-tooltip .label {
+            color: #FFC700;
+            font-weight: 600;
+            min-width: 65px;
+            display: inline-block;
+        }
+        .floating-tooltip .value {
+            color: #fff;
+            word-break: break-all;
+        }
+        .floating-tooltip .row {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .floating-tooltip .row:last-child {
+            border-bottom: none;
+        }
+        .floating-tooltip .close-btn {
+            position: absolute;
+            top: 6px;
+            right: 10px;
+            cursor: pointer;
+            color: rgba(255,255,255,0.5);
+            font-size: 1.1rem;
+            transition: color 0.3s;
+            background: none;
+            border: none;
+        }
+        .floating-tooltip .close-btn:hover {
+            color: #FFC700;
+        }
+        .floating-tooltip .title-row {
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: 6px;
+            color: #FFC700;
+            border-bottom: 1px solid rgba(255,199,0,0.2);
+            padding-bottom: 6px;
+        }
+        .computer-cell {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            position: relative;
+        }
+        .computer-name-click {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .computer-name-click:hover {
+            color: #FFC700;
+        }
+        .laptop-icon {
+            color: #004D43;
+        }
+    </style>
 </head>
 <body class="pattern-bg">
     <div class="monitor-container">
@@ -115,6 +217,13 @@
         </div>
     </div>
 
+    <!-- Плавающий тултип -->
+    <div id="floatingTooltip" class="floating-tooltip">
+        <button class="close-btn" onclick="hideTooltip()">✕</button>
+        <div class="title-row" id="tooltipTitle">Информация об устройстве</div>
+        <div id="tooltipBody"></div>
+    </div>
+
     <div id="toast" class="toast-notification">
         <i class="fas fa-plug"></i>
         <span id="toastMessage">Подключение...</span>
@@ -129,6 +238,8 @@
         let isAdmin = false;
         let sessionCheckInterval = null;
         let activityTimeout = null;
+        let currentTooltipComputer = null;
+        let isTooltipPinned = false;
 
         // ========== УПРАВЛЕНИЕ СЕССИЕЙ ==========
         
@@ -136,16 +247,9 @@
             try {
                 const response = await fetch('/api/session/check');
                 const data = await response.json();
-                
                 if (!data.active) {
-                    if (data.reason === 'timeout') {
-                        showToast('⚠️ Сессия истекла из-за бездействия. Войдите снова.', false);
-                    } else {
-                        showToast('⚠️ Сессия неактивна. Войдите снова.', false);
-                    }
-                    setTimeout(() => {
-                        window.location.href = '/login';
-                    }, 2000);
+                    showToast('⚠️ Сессия истекла. Войдите снова.', false);
+                    setTimeout(() => window.location.href = '/login', 2000);
                     return false;
                 }
                 return true;
@@ -168,7 +272,7 @@
             if (activityTimeout) clearTimeout(activityTimeout);
             activityTimeout = setTimeout(() => {
                 checkSession();
-            }, 120000); // Проверка через 2 минуты бездействия
+            }, 120000);
         }
 
         async function logout() {
@@ -180,13 +284,11 @@
             window.location.href = '/login';
         }
 
-        // Отслеживаем действия пользователя для продления сессии
         document.addEventListener('click', updateActivity);
         document.addEventListener('keypress', updateActivity);
         document.addEventListener('mousemove', updateActivity);
         document.addEventListener('scroll', updateActivity);
 
-        // Запускаем проверку сессии каждую минуту
         if (sessionCheckInterval) clearInterval(sessionCheckInterval);
         sessionCheckInterval = setInterval(async () => {
             const isActive = await checkSession();
@@ -211,6 +313,96 @@
                 console.error('Error checking admin status:', error);
             }
         }
+
+        // ========== ТУЛТИП ==========
+        
+        function showTooltip(computer, event) {
+            const tooltip = document.getElementById('floatingTooltip');
+            const body = document.getElementById('tooltipBody');
+            const title = document.getElementById('tooltipTitle');
+            
+            // Формируем содержимое (без UUID)
+            title.textContent = `🖥️ ${computer.hostname || 'Unknown'}`;
+            body.innerHTML = `
+                <div class="row"><span class="label">ОС:</span> <span class="value">${escapeHtml(computer.os || 'Неизвестно')}</span></div>
+                <div class="row"><span class="label">CPU:</span> <span class="value">${escapeHtml(computer.cpu || 'Неизвестно')}</span></div>
+                <div class="row"><span class="label">RAM:</span> <span class="value">${escapeHtml(computer.memory || 'Нет данных')}</span></div>
+                <div class="row"><span class="label">Версия:</span> <span class="value">${escapeHtml(computer.version || 'Неизвестно')}</span></div>
+                <div class="row"><span class="label">Создан:</span> <span class="value">${formatDate(computer.created_at || computer.first_seen)}</span></div>
+            `;
+            
+            currentTooltipComputer = computer;
+            
+            // Позиционируем рядом с курсором
+            const x = event.clientX + 15;
+            const y = event.clientY + 15;
+            
+            // Проверяем выход за границы
+            const tooltipWidth = 320;
+            const tooltipHeight = 240;
+            let left = x;
+            let top = y;
+            
+            if (left + tooltipWidth > window.innerWidth) {
+                left = window.innerWidth - tooltipWidth - 10;
+            }
+            if (top + tooltipHeight > window.innerHeight) {
+                top = window.innerHeight - tooltipHeight - 10;
+            }
+            if (left < 10) left = 10;
+            if (top < 10) top = 10;
+            
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+            tooltip.classList.add('show');
+            
+            isTooltipPinned = false;
+        }
+
+        function hideTooltip() {
+            document.getElementById('floatingTooltip').classList.remove('show');
+            isTooltipPinned = false;
+            currentTooltipComputer = null;
+        }
+
+        function toggleTooltip(computer, event) {
+            const tooltip = document.getElementById('floatingTooltip');
+            
+            // Если тултип уже показан для этого компьютера и закреплен
+            if (isTooltipPinned && currentTooltipComputer && currentTooltipComputer.uuid === computer.uuid) {
+                hideTooltip();
+                return;
+            }
+            
+            // Если тултип уже показан для другого компьютера или не закреплен
+            if (isTooltipPinned) {
+                hideTooltip();
+                // Небольшая задержка перед показом нового
+                setTimeout(() => {
+                    showTooltip(computer, event);
+                    isTooltipPinned = true;
+                }, 100);
+                return;
+            }
+            
+            showTooltip(computer, event);
+            isTooltipPinned = true;
+        }
+
+        // Закрытие тултипа при клике вне его
+        document.addEventListener('click', function(event) {
+            const tooltip = document.getElementById('floatingTooltip');
+            const trigger = event.target.closest('.info-trigger');
+            
+            // Если клик по иконке - не закрываем (обработка в toggleTooltip)
+            if (trigger) return;
+            
+            // Если клик внутри тултипа - не закрываем
+            if (tooltip.contains(event.target)) return;
+            
+            // Иначе закрываем
+            hideTooltip();
+        });
 
         // ========== КОПИРОВАНИЕ В БУФЕР ОБМЕНА ==========
         
@@ -315,17 +507,59 @@
         
         function formatDate(dateString) {
             if (!dateString) return 'Никогда';
-            const date = new Date(dateString);
-            const now = new Date();
-            const diffSeconds = Math.floor((now - date) / 1000);
-            if (diffSeconds < 60) return `${diffSeconds} сек назад`;
-            if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} мин назад`;
-            return date.toLocaleString('ru-RU');
+            try {
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return 'Никогда';
+                
+                const now = new Date();
+                const diffSeconds = Math.floor((now - date) / 1000);
+                
+                if (diffSeconds < 0 || diffSeconds > 2592000) {
+                    return date.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+                
+                if (diffSeconds < 60) {
+                    return `${diffSeconds} сек назад`;
+                }
+                if (diffSeconds < 3600) {
+                    const minutes = Math.floor(diffSeconds / 60);
+                    return `${minutes} мин назад`;
+                }
+                if (diffSeconds < 86400) {
+                    const hours = Math.floor(diffSeconds / 3600);
+                    return `${hours} ч назад`;
+                }
+                if (diffSeconds < 2592000) {
+                    const days = Math.floor(diffSeconds / 86400);
+                    return `${days} дн назад`;
+                }
+                
+                return date.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                return 'Неизвестно';
+            }
         }
 
         function isOnline(lastSeen) {
             if (!lastSeen) return false;
-            return (new Date() - new Date(lastSeen)) < 30000;
+            try {
+                const diff = (new Date() - new Date(lastSeen)) / 1000;
+                return diff < 30;
+            } catch (e) {
+                return false;
+            }
         }
 
         function escapeHtml(str) {
@@ -340,7 +574,6 @@
             const searchType = document.getElementById('searchType').value;
             
             if (!searchTerm) {
-                filteredComputers = [];
                 document.getElementById('searchInfoText').innerHTML = `Введите текст для поиска`;
                 return [];
             }
@@ -417,28 +650,46 @@
                 const online = isOnline(computer.last_online);
                 const computerName = escapeHtml(computer.hostname || 'Unknown');
                 const computerId = escapeHtml(computer.id);
+                const uuid = escapeHtml(computer.uuid || '');
+                
                 return `
-                    <tr onclick="connectRustDesk('${computerId}', '${computerName.replace(/'/g, "\\'")}')">
+                    <tr>
                         <td><strong>${startIndex + idx + 1}</strong></td>
-                        <td style="cursor: pointer;" onclick="event.stopPropagation(); copyToClipboard('${computerName.replace(/'/g, "\\'")}', '${computerName.replace(/'/g, "\\'")}')" title="Нажмите чтобы скопировать имя">
-                            <div class="computer-name">
-                                <i class="fas fa-laptop-code"></i> ${computerName}
+                        <td>
+                            <div class="computer-cell">
+                                <span class="info-trigger" onclick="toggleTooltip(
+                                    {
+                                        hostname: '${computerName.replace(/'/g, "\\'")}',
+                                        uuid: '${uuid.replace(/'/g, "\\'")}',
+                                        os: '${escapeHtml(computer.os || 'Неизвестно').replace(/'/g, "\\'")}',
+                                        cpu: '${escapeHtml(computer.cpu || 'Неизвестно').replace(/'/g, "\\'")}',
+                                        memory: '${escapeHtml(computer.memory || 'Нет данных').replace(/'/g, "\\'")}',
+                                        version: '${escapeHtml(computer.version || 'Неизвестно').replace(/'/g, "\\'")}',
+                                        created_at: '${escapeHtml(computer.created_at || computer.first_seen || '').replace(/'/g, "\\'")}'
+                                    },
+                                    event
+                                )" title="Нажмите для просмотра информации">
+                                    <i class="fas fa-info-circle"></i>
+                                </span>
+                                <div class="computer-name-click" onclick="copyToClipboard('${computerName.replace(/'/g, "\\'")}', '${computerName.replace(/'/g, "\\'")}')" title="Нажмите чтобы скопировать имя">
+                                    <i class="fas fa-laptop-code laptop-icon"></i> ${computerName}
+                                </div>
                             </div>
-                        </span>
+                        </td>
                         <td>
                             <span class="computer-id" onclick="event.stopPropagation(); connectRustDesk('${computerId}', '${computerName.replace(/'/g, "\\'")}')" title="Нажмите для подключения через RustDesk">
                                 ${computerId} <i class="fas fa-external-link-alt"></i>
                             </span>
-                        </span>
-                        <td><i class="fas fa-user"></i> ${escapeHtml(computer.username || 'Unknown')}</span>
-                        <td><i class="fas fa-network-wired"></i> ${escapeHtml(computer.ip || 'N/A')}</span>
+                        </td>
+                        <td><i class="fas fa-user"></i> ${escapeHtml(computer.username || 'Unknown')}</td>
+                        <td><i class="fas fa-network-wired"></i> ${escapeHtml(computer.ip || 'N/A')}</td>
                         <td>
                             <div class="${online ? 'status-online' : 'status-offline'}">
                                 <i class="fas fa-circle"></i> ${online ? 'АКТИВНО' : 'ОФФЛАЙН'}
                             </div>
-                        </span>
-                        <td><i class="far fa-clock"></i> ${formatDate(computer.last_online)}</span>
-                    </span>
+                        </td>
+                        <td><i class="far fa-clock"></i> ${formatDate(computer.last_online)}</td>
+                    </tr>
                 `;
             }).join('');
         }
