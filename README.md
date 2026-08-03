@@ -1,4 +1,4 @@
-
+```markdown
 # RustDesk Monitor
 
 [![GitHub release](https://img.shields.io/badge/release-v6.0.0-brightgreen)](https://github.com/fiverok/sveApiRust/releases)
@@ -58,7 +58,7 @@
 
 ### Установка
 
-
+```bash
 # Клонирование репозитория
 git clone https://github.com/fiverok/sveApiRust.git
 cd sveApiRust
@@ -68,7 +68,7 @@ docker-compose up -d
 
 # Проверка работы
 curl http://localhost:21114/health
-
+```
 
 ### Первый вход
 
@@ -114,7 +114,7 @@ curl http://localhost:21114/health
 
 ## 📁 Структура проекта
 
-
+```
 sveApiRust/
 ├── static/                 # Статические файлы
 │   ├── style.css          # Общие стили
