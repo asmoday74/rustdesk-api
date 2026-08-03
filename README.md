@@ -58,7 +58,7 @@
 
 ### Установка
 
-```bash
+
 # Клонирование репозитория
 git clone https://github.com/fiverok/sveApiRust.git
 cd sveApiRust
@@ -114,7 +114,7 @@ curl http://localhost:21114/health
 
 ## 📁 Структура проекта
 
-```
+
 sveApiRust/
 ├── static/                 # Статические файлы
 │   ├── style.css          # Общие стили
