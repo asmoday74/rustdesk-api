@@ -4,4 +4,3 @@ flask-socketio==5.3.4
 python-socketio==5.9.0
 eventlet==0.33.3
 openpyxl==3.1.2
-bcrypt==4.2.0  # проверка bcrypt-паролей, перенесённых из rustdesk-server-pro
