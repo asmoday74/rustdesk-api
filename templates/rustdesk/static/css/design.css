@@ -1,0 +1,114 @@
+/* Дизайн "rustdesk" (по умолчанию): стиль консоли RustDesk,
+   тёмная/светлая схема через [data-theme], синий акцент, сайдбар + топбар. */
+
+[data-design="rustdesk"] {
+    --font: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', 'Consolas', monospace;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --content-max: 100%;
+    --content-pad: 22px;
+    --accent: #1976d2;
+    --accent-hover: #1565c0;
+    --on-accent: #fff;
+    --accent-soft: rgba(25, 118, 210, .14);
+    --success: #2e9e5b;
+    --success-soft: rgba(46, 158, 91, .15);
+    --danger: #d64545;
+    --danger-soft: rgba(214, 69, 69, .14);
+    --warn: #b98a1c;
+    --warn-soft: rgba(185, 138, 28, .15);
+    --shadow: 0 1px 3px rgba(0,0,0,.08);
+    --overlay: rgba(0,0,0,.5);
+    --toast-bg: #202124;
+    --toast-text: #fff;
+    --sidebar-w: 232px;
+}
+
+/* Светлая схема */
+[data-design="rustdesk"][data-theme="light"] {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --panel-2: #f2f4f7;
+    --text: #1c2127;
+    --muted: #667085;
+    --border: #e4e7ec;
+    --input-bg: #ffffff;
+    --btn-bg: #f2f4f7;
+    --btn-bg-hover: #e7ebf0;
+    --btn-text: #1c2127;
+    --chrome-bg: #ffffff;
+    --chrome-text: #1c2127;
+    --sidebar-bg: #fbfcfd;
+}
+
+/* Тёмная схема (по умолчанию) */
+[data-design="rustdesk"][data-theme="dark"] {
+    --bg: #141619;
+    --panel: #1d2024;
+    --panel-2: #24282d;
+    --text: #e6e8eb;
+    --muted: #9aa2ad;
+    --border: #2c3138;
+    --input-bg: #171a1d;
+    --btn-bg: #24282d;
+    --btn-bg-hover: #2c3138;
+    --btn-text: #e6e8eb;
+    --chrome-bg: #1a1d21;
+    --chrome-text: #e6e8eb;
+    --sidebar-bg: #17191c;
+    --accent: #2196f3;
+    --accent-hover: #42a5f5;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+    --toast-bg: #2b2f34;
+}
+
+/* ===== Каркас ===== */
+[data-design="rustdesk"] .rd-topbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; padding: 0 20px;
+    background: var(--chrome-bg); color: var(--chrome-text);
+    border-bottom: 1px solid var(--border);
+}
+[data-design="rustdesk"] .rd-brand { display: flex; align-items: center; gap: 11px; }
+[data-design="rustdesk"] .rd-brand img { width: 30px; height: 30px; }
+[data-design="rustdesk"] .rd-brand .rd-title { font-weight: 600; font-size: 1.02rem; }
+[data-design="rustdesk"] .rd-top-actions { display: flex; align-items: center; gap: 8px; }
+[data-design="rustdesk"] .rd-user {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: .86rem; color: var(--chrome-text);
+    padding: 5px 10px; border-radius: 999px;
+}
+[data-design="rustdesk"] .rd-user .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: .8rem; font-weight: 600; text-transform: uppercase;
+}
+
+[data-design="rustdesk"] .layout {
+    display: flex; flex-direction: column; min-height: 100vh;
+}
+[data-design="rustdesk"] .rd-body { display: flex; align-items: stretch; flex: 1; }
+[data-design="rustdesk"] .content { flex: 1; }
+[data-design="rustdesk"] .rd-sidebar {
+    flex: 0 0 var(--sidebar-w); width: var(--sidebar-w);
+    background: var(--sidebar-bg); border-right: 1px solid var(--border);
+    padding: 14px 10px;
+}
+[data-design="rustdesk"] .rd-nav { display: flex; flex-direction: column; gap: 3px; }
+[data-design="rustdesk"] .rd-nav a {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 13px; border-radius: var(--radius-sm);
+    color: var(--muted); text-decoration: none; font-size: .9rem;
+}
+[data-design="rustdesk"] .rd-nav a i { width: 18px; text-align: center; }
+[data-design="rustdesk"] .rd-nav a:hover { background: var(--panel-2); color: var(--text); }
+[data-design="rustdesk"] .rd-nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+[data-design="rustdesk"] .content { flex: 1; }
+
+@media (max-width: 900px) {
+    [data-design="rustdesk"] .rd-body { display: block; }
+    [data-design="rustdesk"] .rd-sidebar { display: none; }
+}

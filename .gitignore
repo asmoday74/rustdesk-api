@@ -53,3 +53,6 @@ logs/
 .env
 *.pem
 *.key
+
+#Memory
+MEMORY.md

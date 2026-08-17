@@ -5,7 +5,7 @@ import logging
 
 from modules.database import (
     get_computer_by_uuid, get_computer_by_id,
-    update_sysinfo, update_heartbeat, get_stats
+    update_sysinfo, update_heartbeat, get_stats, execute_query
 )
 
 sysinfo_logger = logging.getLogger('sysinfo')
@@ -101,6 +101,77 @@ def init_public_routes(app):
             heartbeat_logger.error(f"HEARTBEAT | IP={client_ip} | Error: {e}")
             return jsonify({}), 500
     
+    @app.route('/api/audit/<string:audit_type>', methods=['POST'])
+    def client_audit(audit_type):
+        """Аудит подключений от клиентов RustDesk (conn/file/alarm).
+        Клиент 1.4.x ожидает пустой ответ 2xx и дедупликацию по nonce."""
+        if audit_type not in ('conn', 'file', 'alarm'):
+            return '', 404
+
+        data = request.get_json(silent=True) or {}
+        nonce = str(data.get('nonce') or '')
+        try:
+            if nonce:
+                exists = execute_query(
+                    'SELECT id FROM rustdesk_audits WHERE nonce = %s',
+                    (nonce,), fetch_one=True
+                )
+                if exists:
+                    return '', 200
+
+            device_id = str(data.get('id') or '')
+            uuid = str(data.get('uuid') or '')
+            conn_id = int(data.get('conn_id') or 0)
+
+            if audit_type == 'conn':
+                action = str(data.get('action') or '')
+                if action == 'new':
+                    execute_query("""
+                        INSERT INTO rustdesk_audits (
+                            audit_type, device_id, uuid, conn_id, session_id,
+                            action, ip, nonce
+                        ) VALUES ('conn', %s, %s, %s, %s, 'new', %s, %s)
+                    """, (device_id, uuid, conn_id, int(data.get('session_id') or 0),
+                          str(data.get('ip') or ''), nonce))
+                elif action == 'close':
+                    execute_query("""
+                        UPDATE rustdesk_audits SET close_time = NOW()
+                        WHERE audit_type = 'conn' AND device_id = %s AND conn_id = %s
+                          AND close_time IS NULL
+                    """, (device_id, conn_id))
+                else:
+                    peer = data.get('peer') or []
+                    from_peer = str(peer[0]) if isinstance(peer, list) and len(peer) > 0 else ''
+                    from_name = str(peer[1]) if isinstance(peer, list) and len(peer) > 1 else ''
+                    execute_query("""
+                        UPDATE rustdesk_audits SET
+                            from_peer = %s, from_name = %s, conn_type = %s
+                        WHERE audit_type = 'conn' AND device_id = %s AND conn_id = %s
+                          AND close_time IS NULL
+                    """, (from_peer, from_name, str(data.get('type') or ''),
+                          device_id, conn_id))
+            elif audit_type == 'file':
+                execute_query("""
+                    INSERT INTO rustdesk_audits (
+                        audit_type, device_id, uuid, conn_id, file_type,
+                        path, is_file, info, nonce
+                    ) VALUES ('file', %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (device_id, uuid, conn_id, int(data.get('type') or 0),
+                      str(data.get('path') or ''), bool(data.get('is_file')),
+                      str(data.get('info') or ''), nonce))
+            else:
+                execute_query("""
+                    INSERT INTO rustdesk_audits (
+                        audit_type, device_id, uuid, conn_id, file_type, info, nonce
+                    ) VALUES ('alarm', %s, %s, %s, %s, %s, %s)
+                """, (device_id, uuid, conn_id, int(data.get('typ') or 0),
+                      str(data.get('info') or ''), nonce))
+        except Exception as e:
+            error_logger.error(f"AUDIT | Error: {e}")
+            # Ответ с error заставляет клиента повторять отправку
+            return jsonify({'error': str(e)}), 200
+        return '', 200
+
     @app.route('/api/version', methods=['GET'])
     def get_version():
         return API_VERSION, 200

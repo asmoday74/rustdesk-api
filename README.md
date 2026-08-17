@@ -1,5 +1,5 @@
 
-# RustDesk Monitor
+# asmApiRD — RustDesk API / Monitor
 
 [![GitHub release](https://img.shields.io/badge/release-v6.0.0-brightgreen)](https://github.com/fiverok/sveApiRust/releases)
 [![Docker](https://img.shields.io/badge/docker-ready-blue)](https://www.docker.com/)
@@ -33,6 +33,38 @@
 - **Копирование имени** устройства в буфер обмена
 - **Подключение через RustDesk** по клику на ID
 
+### Адресная книга (порт функционала lejianwen/rustdesk-api)
+- **Синхронизация адресной книги** клиентов RustDesk с сервером
+- **Авторизация клиентов** по логину/паролю с выдачей access_token
+- **Личные адресные книги** для каждого пользователя
+- **Общие адресные книги** (коллекции) с правилами доступа: чтение / чтение и запись / полный доступ
+- **Теги** с цветами, переименованием и удалением
+- **Legacy-режим** (`GET/POST /api/ab`) и **personal-режим** (guid-эндпоинты)
+- **Веб-интерфейс** управления адресной книгой (`/ab`)
+
+### Группы пользователей (как в rustdesk-server-pro)
+- **Группы** двух типов: *обычная* (участник видит только себя) и *общая*
+  (участники видят устройства друг друга во вкладке «Группа» клиента)
+- **Назначение группы** пользователю при создании и в любой момент после
+- **Вкладка «Группа» в клиенте RustDesk**: `/api/users` и `/api/peers` отдают
+  участников и их устройства согласно членству в группе
+- **Шаринг адресной книги с группой** (правила доступа type=group)
+- **Управление группами** в админ-панели (`/admin`)
+
+### Оформление (шаблоны дизайна)
+- Шаблоны разнесены по папкам: `templates/<design>/` — страницы (`base/index/admin/ab/login`)
+  + своя статика (`static/css/design.css`, `static/img/logo.svg`). Общий контент/JS —
+  в `templates/_partials/`, общие стили — `static/css/base.css`.
+- **`rustdesk`** (по умолчанию): стиль консоли RustDesk — тёмная/светлая схема
+  (переключатель в шапке, `localStorage`), родной логотип, сайдбар.
+- **`sve`**: прежний фирменный стиль (зелёный #004D43 + жёлтый #FFC700), **светлый фон**,
+  без переключателя темы.
+- Выбор шаблона — переменная **`TEMPLATE`** в `docker-compose.yml`. Если не задана или
+  папка `templates/<имя>` отсутствует — используется `rustdesk`.
+- Статика шаблона отдаётся роутом `/theme/<path>`.
+- Раздел **«Управление»** (`/admin`) разбит на вкладки: Пользователи / Группы /
+  Устройства (подменю).
+
 ### Администрирование
 - **Управление пользователями** (создание/удаление)
 - **Ролевая модель** (администратор/пользователь)
@@ -45,7 +77,7 @@
 - **Docker** контейнеризация
 - **Безопасное хеширование** паролей (PBKDF2)
 - **Детальное логирование** sysinfo и heartbeat
-- **Корпоративный дизайн** (зеленый #004D43, желтый #FFC700)
+- **Шаблоны дизайна**: `rustdesk` (тёмная/светлая схема) и `sve` (прежний от https://github.com/fiverok/sveApiRust)
 - **Автоматическая очистка** старых данных
 
 ## 🚀 Быстрый старт
@@ -60,8 +92,8 @@
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/fiverok/sveApiRust.git
-cd sveApiRust
+git clone https://github.com/asmoday74/rustdesk-api
+cd rustdesk-api
 
 # Запуск в Docker
 docker-compose up -d
@@ -86,6 +118,9 @@ curl http://localhost:21114/health
 |----------|-------|----------|-------|
 | `/api/sysinfo` | POST | Регистрация устройства | `SYSINFO_UPDATED` |
 | `/api/heartbeat` | POST | Обновление статуса | `{"modified_at": timestamp}` |
+| `/api/audit/conn` | POST | Аудит подключений (клиент >= 1.3) | пустой 200 |
+| `/api/audit/file` | POST | Аудит файловых операций | пустой 200 |
+| `/api/audit/alarm` | POST | Аудит тревог | пустой 200 |
 | `/api/version` | GET | Версия API | `2.0.0` |
 | `/api/sysinfo_ver` | POST | Версия сервера | `2025.1.0` |
 | `/health` | GET | Проверка здоровья | `{"status": "healthy"}` |
@@ -112,6 +147,63 @@ curl http://localhost:21114/health
 | `/api/db/health` | GET | Диагностика БД | Да |
 | `/api/db/repair` | POST | Восстановление БД | Admin |
 
+### API Адресной книги (для клиентов RustDesk)
+
+Авторизация клиентов: `POST /api/login` с полями `uuid`/`deviceInfo` возвращает
+`access_token`, который клиент передаёт в заголовке `Authorization: Bearer <token>`.
+
+| Endpoint | Метод | Описание |
+|----------|-------|----------|
+| `/api/login-options` | GET | Опции входа (пустой список) |
+| `/api/user/info`, `/api/currentUser` | GET/POST | Информация о текущем пользователе |
+| `/api/logout` | POST | Выход клиента (удаление токена) |
+| `/api/users` | GET | Пользователи группы (Bearer) |
+| `/api/peers` | GET | Устройства группы |
+| `/api/ab` | GET/POST | Legacy: получить/полностью обновить адресную книгу |
+| `/api/ab/personal` | POST | Guid личной адресной книги |
+| `/api/ab/settings` | POST | Настройки (лимиты) |
+| `/api/ab/shared/profiles` | POST | Доступные общие адресные книги |
+| `/api/ab/peers?ab={guid}` | POST | Список записей адресной книги |
+| `/api/ab/tags/{guid}` | POST | Список тегов |
+| `/api/ab/peer/add/{guid}` | POST | Добавить запись |
+| `/api/ab/peer/{guid}` | DELETE | Удалить записи |
+| `/api/ab/peer/update/{guid}` | PUT | Обновить запись |
+| `/api/ab/tag/add/{guid}` | POST | Добавить тег |
+| `/api/ab/tag/rename/{guid}` | PUT | Переименовать тег |
+| `/api/ab/tag/update/{guid}` | PUT | Изменить цвет тега |
+| `/api/ab/tag/{guid}` | DELETE | Удалить теги |
+
+### API Адресной книги (веб-интерфейс, сессия)
+
+| Endpoint | Метод | Описание |
+|----------|-------|----------|
+| `/api/web/ab/collections` | GET/POST | Список/создание общих книг |
+| `/api/web/ab/collections/{id}` | PUT/DELETE | Переименование/удаление |
+| `/api/web/ab/rules/{collection_id}` | GET | Правила доступа коллекции |
+| `/api/web/ab/rules` | POST | Предоставить/изменить доступ |
+| `/api/web/ab/rules/{id}` | DELETE | Отозвать доступ |
+| `/api/web/ab/users` | GET | Пользователи группы |
+
+### API Аудита безопасности (веб, сессия; admin)
+- `GET /api/web/audit/conn` — журнал соединений (из `rustdesk_audits`, тип `conn`).
+- `GET /api/web/audit/file` — журнал передачи файлов (тип `file`).
+- Данные пишутся клиентами в `POST /api/audit/conn|file|alarm`.
+- **«Аудит безопасности»** — отдельный раздел в корне меню (`/audit`, admin), две вкладки:
+  «Журнал соединений» (Локальный←откуда, Удаленный←куда, время начала/окончания, тип 0–5)
+  и «Журнал передачи файлов» (Локальный, Удаленный, время, направление →/←, подробности:
+  один файл — имя+размер, несколько — всплывающий список). Обе с пагинацией.
+- В «Управление» вкладка «Группы» переименована в **«Коллекции»**.
+
+### API Групп (веб-интерфейс, сессия; управление — admin)
+
+| Endpoint | Метод | Описание |
+|----------|-------|----------|
+| `/api/web/groups` | GET | Список групп |
+| `/api/web/groups` | POST | Создать группу (`name`, `type`: 1/2) |
+| `/api/web/groups/{id}` | PUT | Изменить группу |
+| `/api/web/groups/{id}` | DELETE | Удалить группу (нельзя id=1) |
+| `/api/web/users/{id}/group` | PUT | Назначить пользователю группу |
+
 ## 📁 Структура проекта
 
 ```
@@ -121,6 +213,7 @@ sveApiRust/
 │   ├── login.html         # Страница входа
 │   ├── index.html         # Страница мониторинга
 │   ├── admin.html         # Панель администратора
+│   ├── ab.html            # Адресная книга (веб-интерфейс)
 │   └── favicon.svg        # Иконка сайта
 ├── modules/               # Модули приложения
 │   ├── __init__.py
@@ -128,7 +221,9 @@ sveApiRust/
 │   ├── auth.py            # Аутентификация
 │   ├── api_auth.py        # API аутентификации
 │   ├── api_computers.py   # API устройств
-│   └── api_public.py      # Публичные API
+│   ├── api_public.py      # Публичные API
+│   ├── ab.py              # Адресная книга: сервисный слой
+│   └── api_ab.py          # Адресная книга: API эндпоинты
 ├── data/                  # Данные (логи)
 │   ├── sysinfo.log        # Логи регистрации
 │   ├── heartbeat.log      # Логи heartbeat
@@ -153,6 +248,9 @@ sveApiRust/
 | `POSTGRES_USER` | Пользователь PostgreSQL | `rustdesk` |
 | `POSTGRES_PASSWORD` | Пароль PostgreSQL | `rustdesk` |
 | `POSTGRES_DB` | Имя базы данных | `rustdesk_monitor` |
+| `TOKEN_EXPIRE_SECONDS` | Время жизни токена клиента (сек) | `604800` (7 дней) |
+| `AB_PERSONAL` | Режим личных адресных книг (1/0) | `1` |
+| `UI_TEMPLATE` | Шаблон дизайна (`rustdesk`\|`sve`) | `rustdesk` |
 
 ### Настройка клиентов RustDesk
 
@@ -169,7 +267,24 @@ api-server=http://your-server:21114
 key=your_public_key
 ```
 
+### Адресная книга в клиенте RustDesk
+
+После указания `api-server` войдите в клиенте RustDesk под учётной записью
+(логин/пароль из веб-панели, например `admin`/`admin`). Адресная книга будет
+синхронизироваться с сервером автоматически. Управление записями, тегами и
+общими адресными книгами также доступно в веб-интерфейсе на странице `/ab`.
+
+Протокол проверен по исходникам клиента RustDesk 1.4.x: поддерживаются поля
+`note` и `device_group_name`, `forceAlwaysRelay` возвращается строкой,
+`/api/ab/peers` постраничный (`current`/`pageSize`). Сервер работает в связке
+с открытым `rustdesk-server` (hbbs/hbbr): порт 21114 hbbs не занимает и
+отдаёт внешнему API-серверу.
+
 ## 🐳 Развертывание
+
+Полная инструкция для **Oracle Linux 9 (minimal)** — связка rustdesk-server
+(hbbs/hbbr) + sveApiRust, firewall, SELinux, бэкапы — в
+[docs/oracle-linux-9.md](docs/oracle-linux-9.md).
 
 ### Docker Compose (рекомендуется)
 
@@ -350,6 +465,18 @@ python app.py
 2. Импортируйте необходимые функции из других модулей
 3. Создайте функцию инициализации маршрутов
 4. Вызовите функцию в `app.py`
+
+### Тесты
+
+Автономный набор тестов (не требует PostgreSQL — слой БД подменяется
+in-memory SQLite). Покрывает адресную книгу, теги, коллекции, правила
+доступа, группы пользователей, аудит клиентов и авторизацию:
+
+```bash
+python tests/run_tests.py
+```
+
+Успешный завершение — строка `ALL N CHECKS PASSED` и код возврата 0.
 
 ### Сборка Docker образа
 

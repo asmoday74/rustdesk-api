@@ -1,0 +1,5 @@
+{% extends "sve/base.html" %}
+{% block title %}Светогорский ЦБК | Мониторинг{% endblock %}
+{% block sve_stats %}<div class="sve-stats"><div class="stat-item"><div class="stat-label">ВСЕГО УСТРОЙСТВ</div><div class="stat-value" id="totalCount">0</div></div><div class="stat-item"><div class="stat-label">АКТИВНО</div><div class="stat-value" id="onlineCount">0</div></div><div class="stat-item"><div class="stat-label">ОФФЛАЙН</div><div class="stat-value" id="offlineCount">0</div></div></div>{% endblock %}
+{% block content %}{% include "_partials/index_body.html" %}{% endblock %}
+{% block scripts %}{% include "_partials/index_js.html" %}{% endblock %}

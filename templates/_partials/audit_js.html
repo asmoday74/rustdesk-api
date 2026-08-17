@@ -1,0 +1,75 @@
+<script>
+    function escapeHtml(s){ if(s===null||s===undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    const CONN_TYPES = {0:'Рабочий стол',1:'Передача файлов',2:'RDP',3:'Просмотр камеры',4:'Терминал',5:'Терминал (администратор)'};
+    const PAGE_SIZE = 20;
+    let auditConnPage = 1, auditConnTotal = 0;
+    let auditFilePage = 1, auditFileTotal = 0;
+
+    function fmtTime(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString('ru-RU'); }
+    function connTypeLabel(t){ if(t===null||t===undefined||t==='') return CONN_TYPES[0];
+        const n = (typeof t==='number')? t : parseInt(t);
+        if (isNaN(n)) return escapeHtml(t);
+        return (CONN_TYPES[n] !== undefined) ? CONN_TYPES[n] : String(n); }
+    function peerInfo(info){ try{ const o=JSON.parse(info||'{}'); return {name:o.name||'', ip:o.ip||''}; }catch(e){ return {name:'',ip:''}; } }
+    function fmtSize(b){ b=Number(b)||0; if(b>1073741824) return (b/1073741824).toFixed(1)+' ГБ';
+        if(b>1048576) return (b/1048576).toFixed(1)+' МБ'; if(b>1024) return (b/1024).toFixed(1)+' КБ'; return b+' Б'; }
+    function fileList(info){ try{ const o=JSON.parse(info||'{}'); return (o.files||[]).map(f=>Array.isArray(f)?{n:f[0],s:f[1]}:{n:f,s:0}); }catch(e){ return []; } }
+
+    function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+
+    function joinPath(p,n){ if(!p) return n; if(!n) return p.replace(/\/+$/,''); return p.endsWith('/')? p+n : p+'/'+n; }
+    function showFiles(info, path){ const fs=fileList(info); const b=document.getElementById('filesModalBody');
+        const head = path? `<div class="rule-row"><span>Путь на удаленном:</span> <b>${escapeHtml(String(path).replace(/\/+$/,''))}</b></div>` : '';
+        b.innerHTML = head + (fs.length? fs.map(f=>`<div class="rule-row"><span style="flex:1;">${escapeHtml(f.n)}</span><b>${fmtSize(f.s)}</b></div>`).join('') : '<p style="color:var(--muted);">Нет данных</p>');
+        document.getElementById('filesModal').classList.add('active'); }
+    function showFilesIdx(i){ const x=auditFileRows[i]; if(x) showFiles(x.info, x.path); }
+
+    function setPager(prefix, page, total){ const pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+        document.getElementById(prefix+'PageInfo').textContent = `Стр. ${page} из ${pages}`;
+        document.getElementById(prefix+'Prev').disabled = page<=1;
+        document.getElementById(prefix+'Next').disabled = page>=pages; }
+
+    async function loadAuditConn(page){ auditConnPage=page;
+        try{ const r=await fetch(`/api/web/audit/conn?page=${page}&page_size=${PAGE_SIZE}`); if(!r.ok) return;
+            const d=await r.json(); auditConnTotal=d.total; setPager('conn',page,d.total);
+            const tb=document.getElementById('auditConnBody');
+            if(!d.rows.length){ tb.innerHTML='<tr><td colspan="5" class="empty-state">Записей нет</td></tr>'; return; }
+            tb.innerHTML=d.rows.map(x=>`<tr>
+                <td><b>${escapeHtml(x.from_name||x.from_peer||'—')}</b> <span style="color:var(--muted);">${escapeHtml(x.from_peer||'')}</span></td>
+                <td><span class="computer-id">${escapeHtml(x.device_id||'-')}</span></td>
+                <td>${fmtTime(x.created_at)}</td>
+                <td>${x.close_time?fmtTime(x.close_time):'<span class="status-online"><i class="fas fa-circle"></i>активно</span>'}</td>
+                <td>${connTypeLabel(x.conn_type)}</td></tr>`).join(''); }catch(e){} }
+    function auditConnGo(p){ const pages=Math.max(1,Math.ceil(auditConnTotal/PAGE_SIZE)); if(p>=1&&p<=pages) loadAuditConn(p); }
+
+    let auditFileRows = [];
+
+    async function loadAuditFile(page){ auditFilePage=page;
+        try{ const r=await fetch(`/api/web/audit/file?page=${page}&page_size=${PAGE_SIZE}`); if(!r.ok) return;
+            const d=await r.json(); auditFileTotal=d.total; auditFileRows=d.rows; setPager('file',page,d.total);
+            const tb=document.getElementById('auditFileBody');
+            if(!d.rows.length){ tb.innerHTML='<tr><td colspan="5" class="empty-state">Записей нет</td></tr>'; return; }
+            tb.innerHTML=d.rows.map((x,idx)=>{ const pi=peerInfo(x.info); const fs=fileList(x.info);
+                const dir = (x.file_type===1)?'&rarr;':'&larr;';
+                let detail;
+                if(fs.length===1) detail=`<span title="${escapeHtml(x.path||'')}">${escapeHtml(joinPath(x.path,fs[0].n))}</span> <span style="color:var(--muted);">${fmtSize(fs[0].s)}</span>`;
+                else if(fs.length>1) detail=`<button class="btn btn-ghost btn-sm" onclick="showFilesIdx(${idx})"><i class="fas fa-list"></i> ${fs.length} файл(ов)</button>`;
+                else detail=escapeHtml((x.path||'—').replace(/\/+$/,''));
+                return `<tr>
+                <td><b>${escapeHtml(pi.name||pi.ip||'—')}</b></td>
+                <td><span class="computer-id">${escapeHtml(x.device_id||'-')}</span></td>
+                <td>${fmtTime(x.created_at)}</td>
+                <td style="font-size:1rem;">${dir}</td>
+                <td>${detail}</td></tr>`; }).join(''); }catch(e){ } }
+    function auditFileGo(p){ const pages=Math.max(1,Math.ceil(auditFileTotal/PAGE_SIZE)); if(p>=1&&p<=pages) loadAuditFile(p); }
+
+    document.querySelectorAll('[data-atab]').forEach(b=>b.addEventListener('click',()=>{
+        document.querySelectorAll('[data-atab]').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        const t=b.dataset.atab;
+        document.getElementById('asection-conn').style.display = (t==='conn')?'':'none';
+        document.getElementById('asection-file').style.display = (t==='file')?'':'none';
+        if(t==='conn') loadAuditConn(auditConnPage); else loadAuditFile(auditFilePage);
+    }));
+    loadAuditConn(1);
+</script>

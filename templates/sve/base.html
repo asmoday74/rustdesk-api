@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru" data-design="sve" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>{% block title %}Светогорский ЦБК{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="/theme/img/logo.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/theme/css/design.css">
+</head>
+<body>
+<div class="layout">
+    <div class="sve-card">
+        <header class="sve-header">
+            <div class="sve-logo">
+                <div class="logo-icon"><i class="fas fa-tree"></i></div>
+                <div>
+                    <h1>НПАО «Светогорский ЦБК»</h1>
+                    <p>Система мониторинга оборудования и удалённого доступа</p>
+                </div>
+            </div>
+            {% block sve_stats %}{% endblock %}
+        </header>
+        <nav class="sve-nav">
+            <div class="nav-links">
+                <a href="/"><i class="fas fa-chart-line"></i> Мониторинг</a>
+                <a href="/ab"><i class="fas fa-book"></i> Адресная книга</a>
+                {% if is_admin %}<a href="/admin"><i class="fas fa-cog"></i> Управление</a>{% endif %}
+                {% if is_admin %}<a href="/audit"><i class="fas fa-shield-alt"></i> Аудит безопасности</a>{% endif %}
+                <a href="/logout"><i class="fas fa-sign-out-alt"></i> Выход</a>
+            </div>
+        </nav>
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</div>
+<script src="/static/js/ui.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,93 @@
+<h1 class="page-title">Управление</h1>
+
+<div class="subnav">
+    <button class="subnav-btn active" data-section="users"><i class="fas fa-users"></i> Пользователи</button>
+    <button class="subnav-btn" data-section="groups"><i class="fas fa-layer-group"></i> Коллекции</button>
+    <button class="subnav-btn" data-section="devices"><i class="fas fa-desktop"></i> Устройства</button>
+</div>
+
+<section id="section-users">
+<div class="panel">
+    <div class="panel-head">
+        <h3>Пользователи</h3>
+        <button class="btn btn-primary" id="addUserBtn"><i class="fas fa-plus"></i> Добавить пользователя</button>
+    </div>
+    <div class="table-wrapper">
+        <table class="computers-table">
+            <thead><tr><th>ID</th><th>Логин</th><th>Роль</th><th>Группа</th><th>Email</th><th>Создан</th><th>Действия</th></tr></thead>
+            <tbody id="usersTableBody"><tr><td colspan="7" class="empty-state">Загрузка...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+</section>
+
+<section id="section-groups">
+<div class="panel">
+    <div class="panel-head">
+        <h3>Коллекции</h3>
+        <button class="btn btn-primary" id="addGroupBtn"><i class="fas fa-plus"></i> Добавить коллекцию</button>
+    </div>
+    <div class="table-wrapper">
+        <table class="computers-table">
+            <thead><tr><th>ID</th><th>Название</th><th>Тип</th><th>Действия</th></tr></thead>
+            <tbody id="groupsTableBody"><tr><td colspan="4" class="empty-state">Загрузка...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+</section>
+
+<section id="section-devices">
+<div class="panel">
+    <div class="panel-head">
+        <h3>Устройства</h3>
+        <div class="search-input-wrapper" style="max-width:300px;flex:none;">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchDevices" class="search-input" placeholder="Поиск устройств...">
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="computers-table">
+            <thead><tr><th>Имя устройства</th><th>ID</th><th>Пользователь</th><th>IP</th><th>Статус</th><th class="sortable" id="sortHeader">Последний контакт <i class="fas fa-sort"></i></th><th>Действия</th></tr></thead>
+            <tbody id="devicesTableBody"><tr><td colspan="7" class="empty-state">Загрузка...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+</section>
+
+<!-- Модалка пользователя -->
+<div id="userModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3>Добавить пользователя</h3><button class="close">&times;</button></div>
+    <form id="addUserForm">
+        <div class="form-group"><label>Логин *</label><input type="text" id="newUsername" required></div>
+        <div class="form-group"><label>Пароль *</label><input type="password" id="newPassword" required></div>
+        <div class="form-group"><label>Роль</label><select id="newRole"><option value="user">Пользователь</option><option value="admin">Администратор</option></select></div>
+        <div class="form-group"><label>Группа</label><select id="newGroup"></select></div>
+        <div class="form-group"><label>Email</label><input type="email" id="newEmail"></div>
+        <button type="submit" class="btn btn-primary">Создать</button>
+    </form>
+</div></div>
+
+<!-- Модалка смены пароля -->
+<div id="passwordModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3>Смена пароля</h3><button class="close close-password-modal">&times;</button></div>
+    <form id="passwordForm">
+        <div class="form-group"><label>Пользователь</label><input type="text" id="passwordUser" disabled></div>
+        <div class="form-group"><label>Новый пароль *</label><input type="password" id="newPasswordField" required minlength="4"></div>
+        <div class="form-group"><label>Подтверждение *</label><input type="password" id="confirmPasswordField" required></div>
+        <button type="submit" class="btn btn-primary">Сменить пароль</button>
+    </form>
+</div></div>
+
+<!-- Модалка группы -->
+<div id="groupModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 id="groupModalTitle">Добавить группу</h3><button class="close close-group-modal">&times;</button></div>
+    <form id="groupForm">
+        <div class="form-group"><label>Название *</label><input type="text" id="groupName" required></div>
+        <div class="form-group"><label>Тип</label><select id="groupType"><option value="1">Обычная (участник видит только себя)</option><option value="2">Общая (видят устройства друг друга)</option></select></div>
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+    </form>
+</div></div>
+
+<div id="toast" class="toast-notification"><i class="fas fa-info-circle"></i><span id="toastMessage"></span></div>

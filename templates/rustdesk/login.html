@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru" data-design="rustdesk" data-theme="{{ theme }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>RustDesk | Вход</title>
+    <link rel="icon" type="image/svg+xml" href="/theme/img/logo.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/login.css">
+    <link rel="stylesheet" href="/theme/css/design.css">
+    <script>
+        (function () { var d = document.documentElement;
+            try { var t = localStorage.getItem('ui_theme');
+                  if (t === 'light' || t === 'dark') d.setAttribute('data-theme', t); } catch (e) {} })();
+    </script>
+</head>
+<body>
+<div class="login-wrapper">
+    <button class="icon-btn login-theme" data-action="toggle-theme" title="Сменить схему"><i class="fas fa-moon"></i></button>
+    <div class="panel login-card">
+        <div class="panel-body">
+            <div class="login-header">
+                <img src="/theme/img/logo.svg" alt="RustDesk">
+                <h1>RustDesk Консоль</h1>
+                <p>Вход в систему</p>
+            </div>
+            <div class="error-message" id="errorMsg">Неверный логин или пароль</div>
+            <form id="loginForm">
+                <div class="form-group"><label>Логин</label><input type="text" id="username" required autofocus></div>
+                <div class="form-group"><label>Пароль</label><input type="password" id="password" required></div>
+                <button type="submit" class="btn btn-primary btn-login">Войти</button>
+            </form>
+        </div>
+    </div>
+</div>
+<script src="/static/js/ui.js"></script>
+<script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        try {
+            const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+            if (r.ok) { const d = await r.json(); window.location.href = (d.role === 'admin') ? '/admin' : '/'; }
+            else document.getElementById('errorMsg').style.display = 'block';
+        } catch (e) { document.getElementById('errorMsg').style.display = 'block'; }
+    });
+</script>
+</body>
+</html>

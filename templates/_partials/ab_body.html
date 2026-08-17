@@ -1,0 +1,80 @@
+<h1 class="page-title">Адресная книга</h1>
+
+<div class="panel">
+    <div class="panel-head">
+        <h3>Книга</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <select id="abSelector" class="search-type-select" onchange="onAbSelected()"><option value="">Загрузка...</option></select>
+            <button class="btn btn-primary" id="addPeerBtn" onclick="openPeerModal()"><i class="fas fa-plus"></i> Добавить</button>
+            <button class="btn btn-ghost" onclick="openTagsModal()"><i class="fas fa-tags"></i> Теги</button>
+            <button class="btn btn-ghost" onclick="openCollectionsModal()"><i class="fas fa-folder"></i> Коллекции</button>
+            <button class="btn btn-ghost" onclick="loadAll()"><i class="fas fa-sync-alt"></i></button>
+        </div>
+    </div>
+    <div class="panel-body">
+        <div class="readonly-note" id="readonlyNote" style="display:none;"><i class="fas fa-eye"></i> Только чтение</div>
+        <div class="search-wrapper" style="margin-bottom:14px;">
+            <div class="search-input-wrapper"><i class="fas fa-search"></i>
+                <input type="text" id="peerSearch" class="search-input" placeholder="Поиск по ID, имени, тегам..." oninput="renderPeers()"></div>
+            <span style="color:var(--muted);font-size:.82rem;">Записей: <b id="peerCount">0</b> · Тегов: <b id="tagCount">0</b></span>
+        </div>
+        <div class="table-wrapper">
+            <table class="computers-table">
+                <thead><tr><th>№</th><th>ID</th><th>Имя / Алиас</th><th>Пользователь</th><th>Платформа</th><th>Теги</th><th>Действия</th></tr></thead>
+                <tbody id="peersTableBody"><tr><td colspan="7" class="empty-state"><i class="fas fa-spinner fa-pulse"></i>Загрузка...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Модалка записи -->
+<div id="peerModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 id="peerModalTitle">Добавить запись</h3><button class="close" onclick="closeModal('peerModal')">&times;</button></div>
+    <form id="peerForm" onsubmit="savePeer(event)">
+        <div class="form-group"><label>ID оборудования *</label><input type="text" id="peerId" required></div>
+        <div class="form-group"><label>Алиас</label><input type="text" id="peerAlias"></div>
+        <div class="form-group"><label>Имя хоста</label><input type="text" id="peerHostname"></div>
+        <div class="form-group"><label>Пользователь</label><input type="text" id="peerUsername"></div>
+        <div class="form-group"><label>Платформа</label><select id="peerPlatform"><option value="">Не определена</option><option>Windows</option><option>Linux</option><option>Mac OS</option><option>Android</option></select></div>
+        <div class="form-group"><label>Пароль</label><input type="text" id="peerPassword"></div>
+        <div class="form-group"><label>Теги</label><div class="tags-checkbox-list" id="peerTagsList"></div></div>
+        <div class="form-group"><label>Заметка</label><input type="text" id="peerNote"></div>
+        <div class="form-group"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="peerForceRelay" style="width:auto;"> Всегда через ретранслятор</label></div>
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+    </form>
+</div></div>
+
+<!-- Модалка тегов -->
+<div id="tagsModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3>Теги</h3><button class="close" onclick="closeModal('tagsModal')">&times;</button></div>
+    <div id="tagsList"></div>
+    <form onsubmit="addTag(event)" style="display:flex;gap:8px;align-items:flex-end;margin-top:12px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;margin:0;"><label>Новый тег</label><input type="text" id="newTagName" required></div>
+        <div class="form-group" style="margin:0;"><label>Цвет</label><input type="color" id="newTagColor" value="#1976d2" style="width:56px;height:38px;"></div>
+        <button type="submit" class="btn btn-primary">Добавить</button>
+    </form>
+</div></div>
+
+<!-- Модалка коллекций -->
+<div id="collectionsModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3>Общие адресные книги</h3><button class="close" onclick="closeModal('collectionsModal')">&times;</button></div>
+    <div id="collectionsList"></div>
+    <form onsubmit="createCollection(event)" style="display:flex;gap:8px;align-items:flex-end;margin-top:12px;">
+        <div class="form-group" style="flex:1;margin:0;"><label>Новая общая книга</label><input type="text" id="newCollectionName" required></div>
+        <button type="submit" class="btn btn-primary">Создать</button>
+    </form>
+</div></div>
+
+<!-- Модалка шаринга -->
+<div id="shareModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 id="shareModalTitle">Общий доступ</h3><button class="close" onclick="closeModal('shareModal')">&times;</button></div>
+    <div id="rulesList"></div>
+    <form onsubmit="saveRule(event)" style="display:flex;gap:8px;align-items:flex-end;margin-top:12px;flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;"><label>Кому</label><select id="ruleType" onchange="onRuleTypeChange()"><option value="1">Пользователь</option><option value="2">Группа</option></select></div>
+        <div class="form-group" style="margin:0;"><label id="ruleTargetLabel">Пользователь</label><select id="ruleUser" required></select></div>
+        <div class="form-group" style="margin:0;"><label>Права</label><select id="ruleLevel"><option value="1">Чтение</option><option value="2">Чтение и запись</option><option value="3">Полный доступ</option></select></div>
+        <button type="submit" class="btn btn-primary">Предоставить</button>
+    </form>
+</div></div>
+
+<div id="toast" class="toast-notification"><i class="fas fa-info-circle"></i><span id="toastMessage"></span></div>

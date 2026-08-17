@@ -215,28 +215,182 @@ def init_db():
             )
         """)
         
+        # Миграция таблицы users: поля для адресной книги (совместимость с rustdesk-api)
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS group_id INTEGER DEFAULT 1")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status INTEGER DEFAULT 1")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''")
+
+        # Таблица групп пользователей (совместимость с rustdesk-server-pro)
+        # type: 1 = обычная (участник видит только себя), 2 = общая (участники видят друг друга)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS groups (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                type INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # Привязка устройств к владельцам для вкладки "Группа" в клиенте
+        cursor.execute("ALTER TABLE computers ADD COLUMN IF NOT EXISTS user_id INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE computers ADD COLUMN IF NOT EXISTS group_id INTEGER DEFAULT 0")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_computers_user_id ON computers(user_id)")
+
+        # Таблица токенов клиентов RustDesk
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_tokens (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL DEFAULT 0,
+                device_uuid TEXT DEFAULT '',
+                device_id TEXT DEFAULT '',
+                token TEXT NOT NULL,
+                expired_at BIGINT DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # Таблица адресной книги
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS address_books (
+                row_id SERIAL PRIMARY KEY,
+                id TEXT NOT NULL DEFAULT '0',
+                username TEXT NOT NULL DEFAULT '',
+                password TEXT NOT NULL DEFAULT '',
+                hostname TEXT NOT NULL DEFAULT '',
+                alias TEXT NOT NULL DEFAULT '',
+                platform TEXT NOT NULL DEFAULT '',
+                tags TEXT NOT NULL DEFAULT '[]',
+                hash TEXT NOT NULL DEFAULT '',
+                user_id INTEGER NOT NULL DEFAULT 0,
+                force_always_relay BOOLEAN NOT NULL DEFAULT FALSE,
+                rdp_port TEXT NOT NULL DEFAULT '',
+                rdp_username TEXT NOT NULL DEFAULT '',
+                online BOOLEAN NOT NULL DEFAULT FALSE,
+                login_name TEXT NOT NULL DEFAULT '',
+                same_server BOOLEAN NOT NULL DEFAULT FALSE,
+                collection_id INTEGER NOT NULL DEFAULT 0,
+                device_group_name TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        # Миграция для существующих таблиц: поля клиента RustDesk >= 1.3
+        cursor.execute("ALTER TABLE address_books ADD COLUMN IF NOT EXISTS device_group_name TEXT NOT NULL DEFAULT ''")
+        cursor.execute("ALTER TABLE address_books ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT ''")
+
+        # Коллекции (общие адресные книги)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS address_book_collections (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL DEFAULT 0,
+                name TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # Правила доступа к коллекциям
+        # rule: 1=read 2=read/write 3=full control; type: 1=personal 2=group
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS address_book_collection_rules (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL DEFAULT 0,
+                collection_id INTEGER NOT NULL DEFAULT 0,
+                rule INTEGER NOT NULL DEFAULT 0,
+                type INTEGER NOT NULL DEFAULT 1,
+                to_id INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # Аудит подключений клиентов RustDesk (/api/audit/*)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS rustdesk_audits (
+                id SERIAL PRIMARY KEY,
+                audit_type TEXT NOT NULL DEFAULT 'conn',
+                device_id TEXT DEFAULT '',
+                uuid TEXT DEFAULT '',
+                conn_id BIGINT DEFAULT 0,
+                session_id BIGINT DEFAULT 0,
+                action TEXT DEFAULT '',
+                from_peer TEXT DEFAULT '',
+                from_name TEXT DEFAULT '',
+                conn_type TEXT DEFAULT '',
+                ip TEXT DEFAULT '',
+                file_type INTEGER DEFAULT 0,
+                path TEXT DEFAULT '',
+                is_file BOOLEAN DEFAULT FALSE,
+                info TEXT DEFAULT '',
+                nonce TEXT DEFAULT '',
+                close_time TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # Теги адресной книги
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tags (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                user_id INTEGER NOT NULL DEFAULT 0,
+                color BIGINT NOT NULL DEFAULT 0,
+                collection_id INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
         # Создаем индексы
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_hostname ON computers(hostname)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_username ON computers(username)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_last_online ON computers(last_online_timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_computers_id ON computers(id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)")
-        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_tokens_token ON user_tokens(token)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_tokens_user_id ON user_tokens(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ab_user_id ON address_books(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ab_id ON address_books(id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ab_collection_id ON address_books(collection_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ab_collections_user_id ON address_book_collections(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ab_rules_collection_id ON address_book_collection_rules(collection_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_collection_id ON tags(collection_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rda_device_conn ON rustdesk_audits(device_id, conn_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rda_nonce ON rustdesk_audits(nonce)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_rda_created ON rustdesk_audits(created_at)")
+
         conn.commit()
         release_db_connection(conn)
         db_logger.info("Database tables created successfully")
-        
+
+        # Группа по умолчанию (id=1), на неё ссылаются существующие пользователи
+        default_group = execute_query('SELECT id FROM groups WHERE id = 1', fetch_one=True)
+        if not default_group:
+            execute_query("""
+                INSERT INTO groups (id, name, type) VALUES (1, 'Default', 1)
+            """)
+            # явная вставка id не двигает sequence — синхронизируем его
+            execute_query("""
+                SELECT setval(pg_get_serial_sequence('groups', 'id'),
+                              (SELECT MAX(id) FROM groups))
+            """)
+            db_logger.info("Created default group id=1")
+
         # Проверяем наличие пользователя admin
         admin = get_user_by_username('admin')
         if not admin:
             from modules.auth import hash_password
             admin_password = hash_password('admin')
             execute_query("""
-                INSERT INTO users (username, password_hash, role)
-                VALUES (%s, %s, 'admin')
+                INSERT INTO users (username, password_hash, role, group_id)
+                VALUES (%s, %s, 'admin', 1)
             """, ('admin', admin_password))
             db_logger.info("Created default admin user: admin / admin")
-        
+
         return True
     except Exception as e:
         db_logger.error(f"Database initialization failed: {e}")
@@ -399,21 +553,21 @@ def get_user_by_username(username):
 
 def get_all_users():
     return execute_query(
-        'SELECT id, username, role, email, created_at, last_login FROM users',
+        'SELECT id, username, role, email, group_id, created_at, last_login FROM users',
         fetch_all=True
     )
 
-def create_user(username, password, role='user', email=None):
+def create_user(username, password, role='user', email=None, group_id=1):
     existing = get_user_by_username(username)
     if existing:
         return False, 'Username already exists'
-    
+
     from modules.auth import hash_password
     password_hash = hash_password(password)
     execute_query("""
-        INSERT INTO users (username, password_hash, role, email)
-        VALUES (%s, %s, %s, %s)
-    """, (username, password_hash, role, email))
+        INSERT INTO users (username, password_hash, role, email, group_id)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (username, password_hash, role, email, group_id or 1))
     return True, 'User created'
 
 def delete_user(user_id):

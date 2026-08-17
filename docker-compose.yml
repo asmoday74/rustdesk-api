@@ -37,8 +37,11 @@ services:
       - TZ=Europe/Moscow
       - DB_DSN=postgresql://rustdesk:rustdesk@db:5432/rustdesk_monitor
       - SECRET_KEY=your-secret-key-change-this-in-production
+      # Шаблон оформления: rustdesk (тёмная/светлая схема) или sve (прежний)
+      - TEMPLATE=rustdesk
     volumes:
       - ./static:/app/static
+      - ./templates:/app/templates
       - ./data:/data
     networks:
       - rustdesk-network

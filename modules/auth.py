@@ -84,19 +84,19 @@ def require_admin(f):
 
 def get_all_users():
     from modules.database import execute_query
-    return execute_query('SELECT id, username, role, email, created_at, last_login FROM users', fetch_all=True)
+    return execute_query('SELECT id, username, role, email, group_id, created_at, last_login FROM users', fetch_all=True)
 
-def create_user(username, password, role='user', email=None):
+def create_user(username, password, role='user', email=None, group_id=1):
     from modules.database import execute_query, get_user_by_username
     existing = get_user_by_username(username)
     if existing:
         return False, 'Username already exists'
-    
+
     password_hash = hash_password(password)
     execute_query("""
-        INSERT INTO users (username, password_hash, role, email)
-        VALUES (%s, %s, %s, %s)
-    """, (username, password_hash, role, email))
+        INSERT INTO users (username, password_hash, role, email, group_id)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (username, password_hash, role, email, group_id or 1))
     return True, 'User created'
 
 def delete_user(user_id):

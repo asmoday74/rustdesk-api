@@ -1,4 +1,4 @@
-from flask import Flask, send_from_directory, session, redirect, url_for, jsonify, request
+from flask import Flask, send_from_directory, session, redirect, url_for, jsonify, request, render_template
 from datetime import datetime
 import os
 import logging
@@ -9,13 +9,30 @@ import sys
 from modules import (
     init_db, init_db_pool, close_all_connections,
     get_user_by_username, create_user, add_audit_log,
-    init_auth_routes, init_computers_routes, init_public_routes
+    init_auth_routes, init_computers_routes, init_public_routes,
+    init_ab_routes
 )
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 # ========== НАСТРОЙКИ ==========
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# Шаблон оформления задаётся в docker-compose переменной TEMPLATE.
+# Если не задан или папка templates/<имя> отсутствует — используем rustdesk.
+def get_design():
+    d = os.environ.get('TEMPLATE', 'rustdesk')
+    if not os.path.isdir(os.path.join(app.root_path, 'templates', d)):
+        d = 'rustdesk'
+    return d
+
+def page_ctx(active):
+    return {
+        'theme': 'dark',
+        'is_admin': session.get('role') == 'admin',
+        'username': session.get('username', ''),
+        'active': active,
+    }
 
 # ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
 log_format = '%(asctime)s - %(levelname)s - %(message)s'
@@ -55,27 +72,47 @@ app.logger.disabled = True
 # ========== ВЕБ-МАРШРУТЫ ==========
 @app.route('/login')
 def login_page():
-    return send_from_directory('static', 'login.html')
+    return render_template(f'{get_design()}/login.html', theme='dark')
 
 @app.route('/')
 def index():
     from modules.auth import require_auth
     auth_check = require_auth(lambda: None)()
-    if isinstance(auth_check, tuple):
+    if auth_check is not None:
         return auth_check
-    return send_from_directory('static', 'index.html')
+    return render_template(f'{get_design()}/index.html', **page_ctx('index'))
 
 @app.route('/admin')
 def admin_page():
     from modules.auth import require_admin
     auth_check = require_admin(lambda: None)()
-    if isinstance(auth_check, tuple):
+    if auth_check is not None:
         return auth_check
-    return send_from_directory('static', 'admin.html')
+    return render_template(f'{get_design()}/admin.html', **page_ctx('admin'))
+
+@app.route('/ab')
+def ab_page():
+    from modules.auth import require_auth
+    auth_check = require_auth(lambda: None)()
+    if auth_check is not None:
+        return auth_check
+    return render_template(f'{get_design()}/ab.html', **page_ctx('ab'))
+
+@app.route('/audit')
+def audit_page():
+    from modules.auth import require_admin
+    auth_check = require_admin(lambda: None)()
+    if auth_check is not None:
+        return auth_check
+    return render_template(f'{get_design()}/audit.html', **page_ctx('audit'))
 
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory('static', filename)
+
+@app.route('/theme/<path:filename>')
+def theme_static(filename):
+    return send_from_directory(os.path.join('templates', get_design(), 'static'), filename)
 
 @app.route('/logout')
 def web_logout():
@@ -119,6 +156,7 @@ def db_repair():
 init_auth_routes(app)
 init_computers_routes(app)
 init_public_routes(app)
+init_ab_routes(app)
 
 # ========== ЗАПУСК ==========
 if __name__ == '__main__':

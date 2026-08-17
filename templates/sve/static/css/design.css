@@ -1,0 +1,92 @@
+/* Дизайн "sve" — прежний фирменный стиль (зелёный #004D43 + жёлтый #FFC700),
+   светлая схема, шапка и навигация сверху. */
+
+[data-design="sve"] {
+    --font: 'Helios', 'Inter', 'Arial', sans-serif;
+    --mono: 'Courier New', monospace;
+    --radius: 0px;
+    --radius-sm: 4px;
+    --content-max: 1600px;
+    --content-pad: 0px;
+    --accent: #004D43;
+    --accent-hover: #00332B;
+    --on-accent: #fff;
+    --accent-soft: rgba(255, 199, 0, .2);
+    --highlight: #FFC700;
+    --success: #2e7d32;
+    --success-soft: #E8F5E9;
+    --danger: #c62828;
+    --danger-soft: #FFEBEE;
+    --warn: #b98a1c;
+    --warn-soft: #FFF8E1;
+    --shadow: 0 20px 40px rgba(0,0,0,.15);
+    --overlay: rgba(0,0,0,.5);
+    --toast-bg: #004D43;
+    --toast-text: #fff;
+
+    --bg: #eef1f4;
+    --panel: #ffffff;
+    --panel-2: #F5F5F5;
+    --text: #333;
+    --muted: #666;
+    --border: #E0E0E0;
+    --input-bg: #fff;
+    --btn-bg: #fff;
+    --btn-bg-hover: #F5F5F5;
+    --btn-text: #004D43;
+}
+
+/* Светлый фон страницы; зелёные только шапка и навигация */
+[data-design="sve"] body, body[data-design="sve"] { background: #eef1f4; }
+[data-design="sve"] .layout { padding: 20px; background: #eef1f4; }
+[data-design="sve"] .sve-card { background: #fff; box-shadow: var(--shadow); overflow: hidden; }
+[data-design="sve"] .content { background: transparent; padding: 0; max-width: none; margin: 0; }
+
+/* Шапка */
+[data-design="sve"] .sve-header {
+    background: #004D43; color: #fff; padding: 24px 32px;
+    border-bottom: 4px solid #FFC700;
+    display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap;
+}
+[data-design="sve"] .sve-logo { display: flex; align-items: center; gap: 18px; }
+[data-design="sve"] .sve-logo .logo-icon {
+    width: 58px; height: 58px; border-radius: 8px;
+    background: linear-gradient(135deg, #004D43, #00332B);
+    border: 1px solid rgba(255,199,0,.3);
+    display: flex; align-items: center; justify-content: center;
+}
+[data-design="sve"] .sve-logo .logo-icon i { font-size: 30px; color: #FFC700; }
+[data-design="sve"] .sve-logo h1 { font-size: 1.45rem; font-weight: 700; }
+[data-design="sve"] .sve-logo p { font-size: .8rem; opacity: .85; }
+[data-design="sve"] .sve-stats { display: flex; gap: 14px; }
+[data-design="sve"] .stat-item {
+    background: rgba(255,255,255,.12); border-left: 3px solid #FFC700;
+    padding: 11px 22px; border-radius: 4px; text-align: center;
+}
+[data-design="sve"] .stat-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .5px; opacity: .8; }
+[data-design="sve"] .stat-value { font-size: 1.55rem; font-weight: 700; color: #FFC700; }
+
+/* Навигация */
+[data-design="sve"] .sve-nav {
+    background: #004D43; padding: 12px 32px;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+}
+[data-design="sve"] .sve-nav .nav-links { display: flex; gap: 20px; align-items: center; }
+[data-design="sve"] .sve-nav a { color: #fff; opacity: .85; text-decoration: none; font-size: .9rem; }
+[data-design="sve"] .sve-nav a:hover { opacity: 1; color: #FFC700; }
+
+/* Таблица в стиле sve: зелёная шапка */
+[data-design="sve"] .computers-table thead th {
+    background: #004D43; color: #fff; text-transform: uppercase;
+    letter-spacing: .5px; font-size: .78rem; border-bottom: 2px solid #FFC700;
+}
+[data-design="sve"] .panel { border: none; border-radius: 0; box-shadow: none; margin-bottom: 0; }
+[data-design="sve"] .panel-head { background: #fff; }
+[data-design="sve"] .search-panel { background: #F5F5F5; }
+
+@media (max-width: 768px) {
+    [data-design="sve"] .layout { padding: 10px; }
+    [data-design="sve"] .sve-header { flex-direction: column; text-align: center; }
+    [data-design="sve"] .sve-nav { flex-direction: column; }
+}

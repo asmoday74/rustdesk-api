@@ -15,19 +15,37 @@ def init_auth_routes(app):
         try:
             data = request.get_json()
             user = get_user(data.get('username'))
-            
+
             if user and verify_password(user.get('password_hash'), data.get('password')):
+                # Режим клиента RustDesk: запрос содержит uuid/deviceInfo.
+                # Совместимость с lejianwen/rustdesk-api - выдаем access_token
+                if data.get('uuid') or data.get('deviceInfo'):
+                    from modules import ab
+                    if not ab.is_user_enabled(user):
+                        return jsonify({'error': 'UserDisabled'}), 401
+                    token = ab.create_user_token(user, data.get('id'), data.get('uuid'))
+                    # Привязываем устройство к владельцу для вкладки "Группа"
+                    ab.bind_device_user(data.get('uuid'), user)
+                    update_user_last_login(user['id'])
+                    add_audit_log(user['id'], 'CLIENT_LOGIN', data.get('username'),
+                                  f"RustDesk client login (device: {data.get('id')})", request.remote_addr)
+                    return jsonify({
+                        'access_token': token,
+                        'type': 'access_token',
+                        'user': ab.user_payload(user)
+                    }), 200
+
                 session['user_id'] = user['id']
                 session['username'] = user['username']
                 session['role'] = user['role']
                 session['login_time'] = datetime.now().isoformat()
                 session['last_activity'] = datetime.now().isoformat()
-                
+
                 update_user_last_login(user['id'])
                 add_audit_log(user['id'], 'LOGIN', data.get('username'), 'Successful login', request.remote_addr)
-                
+
                 return jsonify({
-                    'status': 'success', 
+                    'status': 'success',
                     'role': user['role'],
                     'session_timeout_hours': get_session_timeout_seconds() / 3600
                 }), 200
@@ -86,6 +104,23 @@ def init_auth_routes(app):
     
     @app.route('/api/users', methods=['GET'])
     def get_users():
+        # Режим клиента RustDesk (Bearer-токен): формат lejianwen/rustdesk-api
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            from modules import ab
+            user, ut = ab.get_user_by_access_token(auth_header[7:].strip())
+            if not user or not ab.is_user_enabled(user):
+                return jsonify({'error': 'Unauthorized'}), 401
+            ab.auto_refresh_token(ut)
+            if ab.can_see_group_members(user):
+                users = ab.list_users_by_group(user.get('group_id', 1))
+            else:
+                users = [user]
+            return jsonify({
+                'total': len(users),
+                'data': [ab.user_payload(u) for u in users]
+            })
+
         from modules.auth import get_all_users, require_admin
         auth_check = require_admin(lambda: None)()
         if isinstance(auth_check, tuple):
@@ -100,8 +135,9 @@ def init_auth_routes(app):
             return auth_check
         
         data = request.get_json()
-        success, message = create_user(data.get('username'), data.get('password'), 
-                                       data.get('role', 'user'), data.get('email'))
+        success, message = create_user(data.get('username'), data.get('password'),
+                                       data.get('role', 'user'), data.get('email'),
+                                       data.get('group_id', 1))
         if success:
             add_audit_log(session.get('user_id'), 'CREATE_USER', data.get('username'), message, request.remote_addr)
             return jsonify({'message': message}), 201

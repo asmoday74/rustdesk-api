@@ -1,0 +1,59 @@
+<h1 class="page-title">Аудит безопасности</h1>
+
+<div class="subnav">
+    <button class="subnav-btn active" data-atab="conn"><i class="fas fa-plug"></i> Журнал соединений</button>
+    <button class="subnav-btn" data-atab="file"><i class="fas fa-file-export"></i> Журнал передачи файлов</button>
+</div>
+
+<section id="asection-conn">
+<div class="panel">
+    <div class="panel-head"><h3>Журнал соединений</h3>
+        <button class="btn btn-ghost" onclick="loadAuditConn(auditConnPage)"><i class="fas fa-sync-alt"></i></button></div>
+    <div class="table-wrapper">
+        <table class="computers-table">
+            <thead><tr>
+                <th title="Устройство с которого выполнялось соединение">Локальный</th>
+                <th title="Устройство к которому подключались">Удаленный</th>
+                <th>Время начала</th>
+                <th>Время окончания</th>
+                <th>Тип</th>
+            </tr></thead>
+            <tbody id="auditConnBody"><tr><td colspan="5" class="empty-state">Загрузка...</td></tr></tbody>
+        </table>
+    </div>
+    <div class="pagination-wrapper">
+        <button class="page-btn" id="connPrev" onclick="auditConnGo(auditConnPage-1)"><i class="fas fa-chevron-left"></i></button>
+        <span class="page-info" id="connPageInfo">Стр. 1</span>
+        <button class="page-btn" id="connNext" onclick="auditConnGo(auditConnPage+1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+</div>
+</section>
+
+<section id="asection-file" style="display:none;">
+<div class="panel">
+    <div class="panel-head"><h3>Журнал передачи файлов</h3>
+        <button class="btn btn-ghost" onclick="loadAuditFile(auditFilePage)"><i class="fas fa-sync-alt"></i></button></div>
+    <div class="table-wrapper">
+        <table class="computers-table">
+            <thead><tr>
+                <th title="Устройство с которого выполнялось соединение">Локальный</th>
+                <th title="Устройство к которому подключались">Удаленный</th>
+                <th>Время</th>
+                <th>Направление</th>
+                <th>Подробная информация</th>
+            </tr></thead>
+            <tbody id="auditFileBody"><tr><td colspan="5" class="empty-state">Загрузка...</td></tr></tbody>
+        </table>
+    </div>
+    <div class="pagination-wrapper">
+        <button class="page-btn" id="filePrev" onclick="auditFileGo(auditFilePage-1)"><i class="fas fa-chevron-left"></i></button>
+        <span class="page-info" id="filePageInfo">Стр. 1</span>
+        <button class="page-btn" id="fileNext" onclick="auditFileGo(auditFilePage+1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+</div>
+</section>
+
+<div id="filesModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3>Переданные файлы</h3><button class="close" onclick="closeModal('filesModal')">&times;</button></div>
+    <div id="filesModalBody"></div>
+</div></div>
