@@ -1,6 +1,9 @@
+import base64
 import json
 import os
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import threading
@@ -12,13 +15,70 @@ DATA_DIR = os.environ.get('CLIENTGEN_DIR', '/data/clientgen')
 RDGEN_CLI = os.environ.get('RDGEN_CLI', '')          # путь к rdgen_cli.py или исполняемому файлу
 RDGEN_SERVER = os.environ.get('RDGEN_SERVER', '')    # адрес RDGen сервера
 
+# правила валидации совпадают с формой rdgen (PLATFORM/VERSION/... choices)
+PLATFORM_CHOICES = ('windows', 'windows-x86', 'linux', 'android', 'macos')
+VERSION_CHOICES = ('master', '1.4.9', '1.4.8', '1.4.7', '1.4.6', '1.4.5',
+                   '1.4.4', '1.4.3', '1.4.2', '1.4.1', '1.4.0')
+DIRECTION_CHOICES = ('incoming', 'outgoing', 'both')
+INSTALLATION_CHOICES = ('installationY', 'installationN')
+SETTINGS_CHOICES = ('settingsY', 'settingsN')
+
 DEFAULT_CONFIG = {
-    "platform": "windows", "version": "1.4.9", "delayFix": "on",
-    "exename": "MyApplication", "appname": "MyApplication", "direction": "both",
+    "platform": "windows", "version": "1.4.9",
+    "appname": "", "direction": "both",
     "installation": "installationY", "settings": "settingsY",
     "serverIP": "", "key": "", "apiServer": "",
-    "passApproveMode": "password-click", "theme": "system",
+    "iconbase64": "", "logobase64": "",
+    "permanentPassword": "", "defaultManual": "", "overrideManual": "", "note": "",
 }
+
+
+def _png_dims(data_url):
+    if not isinstance(data_url, str) or ';base64,' not in data_url:
+        return None
+    header, encoded = data_url.split(';base64,', 1)
+    if 'image/png' not in header:
+        return None
+    try:
+        data = base64.b64decode(encoded)
+    except Exception:
+        return None
+    if len(data) < 24 or data[:8] != b'\x89PNG\r\n\x1a\n':
+        return None
+    return struct.unpack('>II', data[16:24])
+
+
+def validate_config(name, cfg):
+    errors = {}
+    if not (name or '').strip():
+        errors['name'] = 'This field is required.'
+    elif not re.fullmatch(r'[A-Za-z0-9_-]+', name):
+        errors['name'] = 'English letters, digits, "-" and "_" only (no spaces).'
+    if not isinstance(cfg, dict):
+        return {'config_json': 'Must be an object.'}
+    appname = (cfg.get('appname') or '').strip()
+    if not appname:
+        errors['appname'] = 'This field is required.'
+    elif not appname.isascii():
+        errors['appname'] = 'English characters only.'
+    for field, choices in (('platform', PLATFORM_CHOICES), ('version', VERSION_CHOICES),
+                           ('direction', DIRECTION_CHOICES), ('installation', INSTALLATION_CHOICES),
+                           ('settings', SETTINGS_CHOICES)):
+        if cfg.get(field) not in choices:
+            errors[field] = 'Invalid choice. Must be one of: %s' % list(choices)
+    for field in ('serverIP', 'key', 'apiServer', 'permanentPassword',
+                  'defaultManual', 'overrideManual', 'note'):
+        if cfg.get(field) is not None and not isinstance(cfg.get(field), str):
+            errors[field] = 'Must be a string.'
+    if cfg.get('iconbase64'):
+        dims = _png_dims(cfg['iconbase64'])
+        if dims is None:
+            errors['iconbase64'] = 'Only PNG images are allowed.'
+        elif dims[0] != dims[1]:
+            errors['iconbase64'] = 'Icon dimensions must be square.'
+    if cfg.get('logobase64') and _png_dims(cfg['logobase64']) is None:
+        errors['logobase64'] = 'Only PNG images are allowed.'
+    return errors
 
 
 def _row(r):

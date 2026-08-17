@@ -1,13 +1,20 @@
 <script>
     function escapeHtml(s){ if(s===null||s===undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-    function closeModal(id){ document.getElementById(id).classList.remove('active'); }
-    const DEFAULT_CFG = {"platform":"windows","version":"1.4.9","delayFix":"on","exename":"MyApplication","appname":"MyApplication","direction":"both","installation":"installationY","settings":"settingsY","serverIP":"","key":"","apiServer":"","passApproveMode":"password-click","theme":"system"};
-    let configs = [];
-    let editCfgId = null;
-    const OS_ICON = {windows:'fab fa-windows', linux:'fab fa-linux', macos:'fab fa-apple', android:'fab fa-android'};
+    function showToast(m,err=false){ const t=document.getElementById('toast'); const msg=document.getElementById('toastMessage'); const i=t.querySelector('i');
+        msg.textContent=m; i.className=err?'fas fa-exclamation-triangle':'fas fa-check-circle';
+        t.style.borderLeftColor=err?'var(--danger)':'var(--accent)'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+
+    const VERSIONS=[['master','nightly'],['1.4.9','1.4.9'],['1.4.8','1.4.8'],['1.4.7','1.4.7'],['1.4.6','1.4.6'],['1.4.5','1.4.5'],['1.4.4','1.4.4'],['1.4.3','1.4.3'],['1.4.2','1.4.2'],['1.4.1','1.4.1'],['1.4.0','1.4.0']];
+    const OS_ICON={windows:'fab fa-windows', linux:'fab fa-linux', macos:'fab fa-apple', android:'fab fa-android'};
+    let configs=[], editCfgId=null, curOs='windows';
+    let images={icon:'', logo:''};
 
     function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString('ru-RU'); }
+    function val(id){ return document.getElementById(id).value; }
+    function chk(id){ return document.getElementById(id).checked; }
+    function setErr(id,msg){ const el=document.getElementById(id); el.textContent=msg||''; el.classList.toggle('show',!!msg); }
 
+    /* ---------- список конфигураций ---------- */
     async function loadConfigs(){
         try{ const r=await fetch('/api/web/clientgen/configs'); if(!r.ok) return;
             configs=await r.json(); renderConfigs(); }catch(e){}
@@ -29,53 +36,24 @@
         if(!configs.length){ tb.innerHTML='<tr><td colspan="7" class="empty-state">Конфигураций нет</td></tr>'; return; }
         tb.innerHTML=configs.map(c=>`<tr>
             <td><b>${escapeHtml(c.name)}</b></td>
-            <td><i class="${OS_ICON[c.platform]||'fas fa-desktop'}"></i> ${escapeHtml(c.platform||'')}</td>
+            <td><i class="${OS_ICON[c.platform]||'fas fa-desktop'}"></i> ${escapeHtml((c.platform||'').replace('windows-x86','windows (x86)'))}</td>
             <td>${escapeHtml(c.version||'—')}</td>
             <td>${buildCell(c)}</td>
             <td>${fmtDate(c.build_date)}</td>
             <td>${escapeHtml(c.author||'')}</td>
             <td><div class="action-cell">
-                <button class="btn btn-ghost btn-sm" onclick="openCfgModal(${c.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-ghost btn-sm" onclick="openEditor(${c.id})"><i class="fas fa-edit"></i></button>
                 <button class="btn btn-ghost btn-sm" onclick="dupCfg(${c.id})"><i class="fas fa-copy"></i></button>
                 <button class="btn btn-danger btn-sm" onclick="delCfg(${c.id})"><i class="fas fa-trash"></i></button>
             </div></td></tr>`).join('');
     }
 
-    function openCfgModal(id){
-        editCfgId = id || null;
-        document.getElementById('cfgModalTitle').textContent = id? 'Редактировать конфигурацию':'Новая конфигурация';
-        if(id){ const c=configs.find(x=>x.id===id); if(!c) return;
-            document.getElementById('cfgName').value=c.name;
-            document.getElementById('cfgPlatform').value=c.platform||'windows';
-            document.getElementById('cfgVersion').value=c.version||'';
-            document.getElementById('cfgJson').value=c.config_json||'{}';
-        } else {
-            document.getElementById('cfgForm').reset();
-            document.getElementById('cfgJson').value=JSON.stringify(DEFAULT_CFG,null,2);
-        }
-        document.getElementById('cfgModal').classList.add('active');
-    }
-
-    async function saveCfg(e){
-        e.preventDefault();
-        const name=document.getElementById('cfgName').value.trim();
-        let cfg; try{ cfg=JSON.parse(document.getElementById('cfgJson').value||'{}'); }catch(err){ alert('Некорректный JSON'); return; }
-        cfg.platform=document.getElementById('cfgPlatform').value;
-        cfg.version=document.getElementById('cfgVersion').value||cfg.version||'';
-        const body={name, config_json: cfg};
-        try{
-            if(editCfgId) await fetch(`/api/web/clientgen/configs/${editCfgId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-            else await fetch('/api/web/clientgen/configs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-            closeModal('cfgModal'); loadConfigs();
-        }catch(err){ alert(err); }
-    }
-
     async function startBuild(id){
         try{ const r=await fetch(`/api/web/clientgen/configs/${id}/build`,{method:'POST'});
             const d=await r.json().catch(()=>({}));
-            if(!r.ok){ alert(d.error || ('Ошибка сборки (HTTP '+r.status+')')); return; }
+            if(!r.ok){ showToast(d.error || ('Ошибка сборки (HTTP '+r.status+')'),true); return; }
             loadConfigs(); pollStatus(id);
-        }catch(e){ alert('Ошибка: '+e); }
+        }catch(e){ showToast('Ошибка: '+e,true); }
     }
     function pollStatus(id){
         const t=setInterval(async()=>{
@@ -89,5 +67,157 @@
     async function delCfg(id){ if(!confirm('Удалить конфигурацию?')) return;
         try{ await fetch(`/api/web/clientgen/configs/${id}`,{method:'DELETE'}); loadConfigs(); }catch(e){} }
 
+    /* ---------- редактор ---------- */
+    function showEditor(on){
+        document.getElementById('cfgListView').style.display = on?'none':'';
+        document.getElementById('cfgEditorView').style.display = on?'':'none';
+    }
+
+    function setOs(os){
+        curOs=os;
+        document.querySelectorAll('.cg-os-btn').forEach(b=>b.classList.toggle('active', b.dataset.os===os));
+        document.getElementById('cgArchRow').style.display = os==='windows'?'':'none';
+    }
+
+    function togglePresetPass(){
+        document.getElementById('cgPassRow').classList.toggle('show', chk('cgPresetPass'));
+        if(!chk('cgPresetPass')) setErr('errPass','');
+    }
+    function toggleAdvanced(){
+        document.getElementById('cgOverrideRow').classList.toggle('show', chk('cgOverrideOn'));
+        document.getElementById('cgDefaultRow').classList.toggle('show', chk('cgDefaultOn'));
+    }
+
+    function copyKey(){
+        const v=val('cgKey'); if(!v) return;
+        navigator.clipboard.writeText(v).then(()=>showToast('Key скопирован'));
+    }
+
+    function pickImage(input,kind){
+        const file=input.files && input.files[0]; input.value='';
+        if(!file) return;
+        const errId = kind==='icon'?'errIcon':'errLogo';
+        setErr(errId,'');
+        if(file.type!=='image/png'){ setErr(errId,'Only PNG images are allowed.'); return; }
+        const reader=new FileReader();
+        reader.onload=e=>{
+            const dataUrl=e.target.result;
+            if(kind==='logo'){ setImage('logo',dataUrl,file.name); return; }
+            const img=new Image();
+            img.onload=()=>{ if(img.naturalWidth!==img.naturalHeight){ setErr('errIcon','Icon dimensions must be square.'); return; }
+                setImage('icon',dataUrl,file.name); };
+            img.onerror=()=>setErr('errIcon','Invalid icon file.');
+            img.src=dataUrl;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function setImage(kind,dataUrl,name){
+        images[kind]=dataUrl||'';
+        const p=document.getElementById(kind==='icon'?'iconPreview':'logoPreview');
+        p.classList.toggle('show',!!dataUrl);
+        if(dataUrl){ p.querySelector('img').src=dataUrl; p.querySelector('.name').textContent=name||''; }
+    }
+    function clearImage(kind){ setImage(kind,'',''); }
+
+    function openEditor(id){
+        editCfgId=id||null;
+        document.getElementById('cgSaveBtn').textContent = id?'Save':'Create';
+        const vs=document.getElementById('cgVersion');
+        vs.innerHTML=VERSIONS.map(v=>`<option value="${v[0]}">${v[1]}</option>`).join('');
+        ['cgName','cgAppName','cgHost','cgKey','cgApi','cgNote','cgPassValue','cgOverrideManual','cgDefaultManual']
+            .forEach(i=>document.getElementById(i).value='');
+        ['cgDisableInstall','cgDisableSettings','cgPresetPass','cgOverrideOn','cgDefaultOn'].forEach(i=>document.getElementById(i).checked=false);
+        document.querySelector('input[name="cgDirection"][value="both"]').checked=true;
+        vs.value='1.4.9';
+        clearImage('icon'); clearImage('logo');
+        ['errName','errAppName','errIcon','errLogo','errPass'].forEach(i=>setErr(i,''));
+
+        if(id){
+            const c=configs.find(x=>x.id===id); if(!c) return;
+            let cfg={}; try{ cfg=JSON.parse(c.config_json||'{}'); }catch(e){}
+            document.getElementById('cgName').value=c.name||'';
+            document.getElementById('cgAppName').value=cfg.appname||'';
+            const platform=cfg.platform||'windows';
+            setOs(platform==='windows-x86'?'windows':(OS_ICON[platform]?platform:'windows'));
+            document.getElementById('cgArch').value = platform==='windows-x86'?'x86':'x64';
+            if(VERSIONS.some(v=>v[0]===cfg.version)) vs.value=cfg.version;
+            const dir=['incoming','outgoing','both'].includes(cfg.direction)?cfg.direction:'both';
+            document.querySelector(`input[name="cgDirection"][value="${dir}"]`).checked=true;
+            document.getElementById('cgDisableInstall').checked = cfg.installation==='installationN';
+            document.getElementById('cgDisableSettings').checked = cfg.settings==='settingsN';
+            document.getElementById('cgHost').value=cfg.serverIP||'';
+            document.getElementById('cgKey').value=cfg.key||'';
+            document.getElementById('cgApi').value=cfg.apiServer||'';
+            document.getElementById('cgNote').value=cfg.note||'';
+            if(cfg.iconbase64) setImage('icon',cfg.iconbase64,'');
+            if(cfg.logobase64) setImage('logo',cfg.logobase64,'');
+            if(cfg.permanentPassword){ document.getElementById('cgPresetPass').checked=true;
+                document.getElementById('cgPassValue').value=cfg.permanentPassword; }
+            if(cfg.overrideManual){ document.getElementById('cgOverrideOn').checked=true;
+                document.getElementById('cgOverrideManual').value=cfg.overrideManual; }
+            if(cfg.defaultManual){ document.getElementById('cgDefaultOn').checked=true;
+                document.getElementById('cgDefaultManual').value=cfg.defaultManual; }
+        } else {
+            setOs('windows');
+            document.getElementById('cgArch').value='x64';
+        }
+        togglePresetPass(); toggleAdvanced();
+        showEditor(true);
+    }
+
+    function closeEditor(){ showEditor(false); }
+
+    function collectCfg(){
+        const platform = (curOs==='windows' && val('cgArch')==='x86') ? 'windows-x86' : curOs;
+        return {
+            platform,
+            version: val('cgVersion'),
+            appname: val('cgAppName').trim(),
+            direction: document.querySelector('input[name="cgDirection"]:checked').value,
+            installation: chk('cgDisableInstall')?'installationN':'installationY',
+            settings: chk('cgDisableSettings')?'settingsN':'settingsY',
+            serverIP: val('cgHost').trim(),
+            key: val('cgKey').trim(),
+            apiServer: val('cgApi').trim(),
+            iconbase64: images.icon,
+            logobase64: images.logo,
+            permanentPassword: chk('cgPresetPass')?val('cgPassValue').trim():'',
+            overrideManual: chk('cgOverrideOn')?val('cgOverrideManual'):'',
+            defaultManual: chk('cgDefaultOn')?val('cgDefaultManual'):'',
+            note: val('cgNote').trim()
+        };
+    }
+
+    function validateForm(name,cfg){
+        let ok=true;
+        if(!name){ setErr('errName','This field is required.'); ok=false; }
+        else if(!/^[A-Za-z0-9_-]+$/.test(name)){ setErr('errName','English letters, digits, "-" and "_" only (no spaces).'); ok=false; }
+        if(!cfg.appname){ setErr('errAppName','This field is required.'); ok=false; }
+        else if(!cfg.appname.split('').every(c=>c.charCodeAt(0)<128)){ setErr('errAppName','English characters only.'); ok=false; }
+        if(chk('cgPresetPass') && !cfg.permanentPassword){ setErr('errPass','This field is required.'); ok=false; }
+        return ok;
+    }
+
+    async function saveCfg(){
+        const name=val('cgName').trim();
+        const cfg=collectCfg();
+        if(!validateForm(name,cfg)) return;
+        const body={name, config_json: cfg};
+        try{
+            const r = editCfgId
+                ? await fetch(`/api/web/clientgen/configs/${editCfgId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+                : await fetch('/api/web/clientgen/configs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+            if(!r.ok){
+                const d=await r.json().catch(()=>({}));
+                const details=d.details?Object.values(d.details).join(' '):'';
+                showToast(d.error||('Ошибка сохранения (HTTP '+r.status+')')+(details?' '+details:''),true);
+                return;
+            }
+            closeEditor(); loadConfigs(); showToast('Конфигурация сохранена');
+        }catch(e){ showToast('Ошибка: '+e,true); }
+    }
+
+    document.querySelectorAll('.cg-os-btn').forEach(b=>b.addEventListener('click',()=>setOs(b.dataset.os)));
     loadConfigs();
 </script>

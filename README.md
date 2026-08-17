@@ -202,6 +202,14 @@ curl http://localhost:21114/health
 сервере), после успешной сборки — кнопка **«Скачать»**; при изменении конфигурации
 артефакт удаляется и «Собрать» снова активна.
 
+Редактор — форма в стиле консоли (OS-вкладки Windows/MacOS/Linux/Android; блоки
+General, Custom server, Visual, Security, Advanced), сохраняет конфиг в схеме
+параметров rdgen (`/api/generate`). Валидация (клиент и сервер) повторяет правила
+rdgen: имя конфигурации обязательно и только `[A-Za-z0-9_-]`, Application name
+обязательно и ASCII, иконка — квадратный PNG, лого — PNG, platform/version/direction/
+installation/settings — из фиксированных списков. `exename` заполняется сервером из
+имени конфигурации.
+
 Переменные окружения:
 - `RDGEN_CLI` — путь к `rdgen_cli.py` (или исполняемому файлу) на сервере;
 - `RDGEN_SERVER` — адрес RDGen-сервера (`-s` для rdgen-cli);

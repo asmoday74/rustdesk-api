@@ -475,12 +475,25 @@ check('/login renders', r.status_code == 200 and b'data-design=' in r.data)
 print('== clientgen ==')
 r = anon.get('/clientgen')
 check('/clientgen served (admin)', r.status_code == 200 and b'data-design=' in r.data)
-r = anon.post('/api/web/clientgen/configs', json={'name': 'test-cfg', 'config_json': {'platform': 'windows', 'version': '1.4.9'}})
+cg_valid = {'platform': 'windows', 'version': '1.4.9', 'appname': 'TestApp',
+            'direction': 'both', 'installation': 'installationY', 'settings': 'settingsY'}
+r = anon.post('/api/web/clientgen/configs', json={'name': 'test-cfg', 'config_json': dict(cg_valid)})
 check('clientgen create', r.status_code == 201)
 cid = r.get_json()['id']
 r = anon.get('/api/web/clientgen/configs')
 check('clientgen list', r.status_code == 200 and any(c['id'] == cid for c in r.get_json()))
-r = anon.put(f'/api/web/clientgen/configs/{cid}', json={'name': 'test-cfg2', 'config_json': {'platform': 'linux', 'version': '1.4.9'}})
+r = anon.get(f'/api/web/clientgen/configs/{cid}')
+check('clientgen exename synced', r.get_json()['config_json'] and
+      json.loads(r.get_json()['config_json']).get('exename') == 'test-cfg')
+bad = dict(cg_valid); bad.pop('appname')
+r = anon.post('/api/web/clientgen/configs', json={'name': 'test-cfg', 'config_json': bad})
+check('clientgen appname required', r.status_code == 400)
+r = anon.post('/api/web/clientgen/configs', json={'name': 'bad name', 'config_json': dict(cg_valid)})
+check('clientgen name format', r.status_code == 400)
+bad = dict(cg_valid); bad['platform'] = 'amiga'
+r = anon.post('/api/web/clientgen/configs', json={'name': 'test-cfg', 'config_json': bad})
+check('clientgen platform choice', r.status_code == 400)
+r = anon.put(f'/api/web/clientgen/configs/{cid}', json={'name': 'test-cfg2', 'config_json': {**cg_valid, 'platform': 'linux'}})
 check('clientgen update', r.status_code == 200)
 r = anon.get(f'/api/web/clientgen/configs/{cid}/status')
 check('clientgen status none', r.status_code == 200 and r.get_json()['build_status'] == 'none')

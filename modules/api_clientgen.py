@@ -34,8 +34,14 @@ def init_clientgen_routes(app):
         name = (body.get('name') or '').strip()
         if not name:
             return _error('ParamsError')
-        config_json = body.get('config_json') or json.dumps(clientgen.DEFAULT_CONFIG)
+        config_json = body.get('config_json')
+        if config_json is None:
+            return _error('ParamsError')
         cfg = json.loads(config_json) if isinstance(config_json, str) else config_json
+        errors = clientgen.validate_config(name, cfg)
+        if errors:
+            return jsonify({'error': 'ValidationError', 'details': errors}), 400
+        cfg['exename'] = name
         cid = clientgen.create_config(
             name, cfg.get('platform', 'windows'), cfg.get('version', ''),
             user.get('username', ''), json.dumps(cfg, ensure_ascii=False))
@@ -60,8 +66,14 @@ def init_clientgen_routes(app):
         name = (body.get('name') or '').strip()
         if not name:
             return _error('ParamsError')
-        config_json = body.get('config_json') or '{}'
+        config_json = body.get('config_json')
+        if config_json is None:
+            return _error('ParamsError')
         cfg = json.loads(config_json) if isinstance(config_json, str) else config_json
+        errors = clientgen.validate_config(name, cfg)
+        if errors:
+            return jsonify({'error': 'ValidationError', 'details': errors}), 400
+        cfg['exename'] = name
         clientgen.update_config(cid, name, cfg.get('platform', 'windows'),
                                 cfg.get('version', ''), json.dumps(cfg, ensure_ascii=False))
         return jsonify({'message': 'updated'})
