@@ -171,6 +171,7 @@
     function collectCfg(){
         const platform = (curOs==='windows' && val('cgArch')==='x86') ? 'windows-x86' : curOs;
         return {
+            exename: val('cgName').trim(),
             platform,
             version: val('cgVersion'),
             appname: val('cgAppName').trim(),

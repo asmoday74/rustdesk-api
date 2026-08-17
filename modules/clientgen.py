@@ -156,8 +156,11 @@ def _run_build(cid):
     art = _artifact_dir(cid)
     cfg_path = os.path.join(art, 'config.json')
     try:
+        # rdgen требует exename; для старых записей без него — имя конфигурации
+        data = json.loads(cfg['config_json'])
+        data['exename'] = data.get('exename') or cfg['name']
         with open(cfg_path, 'w', encoding='utf-8') as f:
-            f.write(cfg['config_json'])
+            json.dump(data, f, ensure_ascii=False)
         exe = [sys.executable] if RDGEN_CLI.endswith('.py') else []
         cmd = exe + [RDGEN_CLI, '-f', cfg_path, '-s', RDGEN_SERVER, '-d']
         proc = subprocess.run(cmd, cwd=art, capture_output=True, text=True, timeout=3600)
