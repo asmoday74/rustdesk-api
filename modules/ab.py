@@ -228,6 +228,35 @@ def ab_to_payload(row):
     }
 
 
+# Порог "онлайн" для устройств (сек), как в /api/peers и статистике
+ONLINE_THRESHOLD_SECONDS = 35
+
+
+def computers_online_map():
+    """device id -> online по last_online_timestamp из таблицы computers."""
+    rows = execute_query(
+        'SELECT id, last_online_timestamp FROM computers', fetch_all=True) or []
+    now_ts = int(time.time())
+    return {
+        r['id']: bool((r.get('last_online_timestamp') or 0) > now_ts - ONLINE_THRESHOLD_SECONDS)
+        for r in rows
+    }
+
+
+def enrich_peers_online(payloads):
+    """Проставляет записям адресной книги живой онлайн-статус из computers.
+
+    Для записей, чьё id отсутствует в computers (никогда не подключались),
+    сохраняется сохранённое при синхронизации значение online."""
+    omap = computers_online_map()
+    if not omap:
+        return payloads
+    for p in payloads:
+        if p.get('id') in omap:
+            p['online'] = omap[p['id']]
+    return payloads
+
+
 def tag_to_payload(row):
     return {
         'id': row['id'],

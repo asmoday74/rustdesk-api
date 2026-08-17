@@ -259,6 +259,20 @@ inner = json.loads(r.get_json()['data'])
 check('legacy sync replaced peers', sorted(p['id'] for p in inner['peers']) == ['111', '222'])
 check('legacy sync tags', inner['tags'] == ['t1'])
 
+print('== peers online status ==')
+fake_execute_query("""
+    INSERT INTO computers (id, uuid, hostname, username, os, last_online_timestamp)
+    VALUES ('111', 'uuid-peer-111', 'PEER-111', 'u1', 'Windows / 11', %s)
+""", (int(time.time()),))
+r = client.post(f'/api/ab/peers?current=1&pageSize=100&ab={guid}', headers=H)
+peers_by_id = {p['id']: p for p in r.get_json()['data']}
+check('peer with recent computer is online', peers_by_id['111']['online'] is True)
+check('peer without computer stays offline', peers_by_id['222']['online'] is False)
+r = client.get('/api/ab', headers=H)
+legacy_peers = {p['id']: p for p in json.loads(r.get_json()['data'])['peers']}
+check('legacy /api/ab online enriched', legacy_peers['111']['online'] is True)
+fake_execute_query("DELETE FROM computers WHERE uuid='uuid-peer-111'")
+
 print('== peer delete ==')
 r = client.delete(f'/api/ab/peer/{guid}', headers=H, json=['111'])
 check('peer delete', r.status_code == 200)

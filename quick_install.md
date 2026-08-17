@@ -69,8 +69,8 @@ docker compose up -d
    - `ZIP_PASSWORD` — тот же пароль, что в `docker-compose.yml`;
    - при необходимости `SIGN_BASE_URL`/`SIGN_API_KEY` (подпись Windows),
      `MACOS_P12_*` (подпись macOS), `ANDROID_*` (подпись Android).
-3. Создайте PAT (Fine-grained или classic с `repo`/`actions`) и укажите его
-   в `GH_TOKEN`.
+3. Создайте PAT в настройках профиля (https://github.com/settings/personal-access-tokens) Fine-grained и укажите его
+   в `GH_TOKEN`. Необходимо выдать права **Read-Write** на **Actions** и **Workflows**
 
 > Важно: сервер должен быть доступен из интернета по `GENURL` — воркфлоу
 > GitHub обращаются к нему напрямую. За NAT без проброса порта/прокси

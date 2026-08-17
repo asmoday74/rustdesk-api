@@ -126,8 +126,10 @@ def init_ab_routes(app):
         tag_names = [t['name'] for t in tags]
         tag_colors = {t['name']: t['color'] for t in tags}
 
+        peers = [ab.ab_to_payload(r) for r in rows]
+        ab.enrich_peers_online(peers)
         res = {
-            'peers': [ab.ab_to_payload(r) for r in rows],
+            'peers': peers,
             'tags': tag_names,
             'tag_colors': json.dumps(tag_colors, ensure_ascii=False),
         }
@@ -233,9 +235,11 @@ def init_ab_routes(app):
         current = request.args.get('current', 1, type=int)
         page_size = request.args.get('pageSize', 100, type=int)
         rows = ab.list_ab(uid, cid, page=current, page_size=page_size)
+        data = [ab.ab_to_payload(r) for r in rows]
+        ab.enrich_peers_online(data)
         return jsonify({
             'total': ab.count_ab(uid, cid),
-            'data': [ab.ab_to_payload(r) for r in rows],
+            'data': data,
             'licensed_devices': 99999,
         })
 

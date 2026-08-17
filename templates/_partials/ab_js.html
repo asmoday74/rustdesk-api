@@ -57,13 +57,16 @@
         return currentPeers.filter(p=>(p.id||'').toLowerCase().includes(term)||(p.hostname||'').toLowerCase().includes(term)||(p.alias||'').toLowerCase().includes(term)||(p.username||'').toLowerCase().includes(term)||(p.tags||[]).some(tg=>tg.toLowerCase().includes(term))); }
 
     function renderPeers(){ const tb=document.getElementById('peersTableBody'); const list=getFiltered();
-        if(!list.length){ tb.innerHTML=`<tr><td colspan="7" class="empty-state"><i class="fas fa-book"></i>${t('no_records')}</td></tr>`; return; }
+        if(!list.length){ tb.innerHTML=`<tr><td colspan="8" class="empty-state"><i class="fas fa-book"></i>${t('no_records')}</td></tr>`; return; }
         const colorByName={}; currentTags.forEach(tg=>colorByName[tg.name]=tg.color);
         tb.innerHTML=list.map((p,i)=>{ const name=p.alias||p.hostname||t('no_name');
             const tags=(p.tags||[]).map(tg=>`<span class="tag-badge" style="background:${colorByName[tg]?colorToHex(colorByName[tg]):'var(--accent)'}">${escapeHtml(tg)}</span>`).join('');
+            const on=p.online===true||p.online==='true';
+            const status=on?`<span class="status-online"><i class="fas fa-circle"></i>${t('peer_online')}</span>`
+                           :`<span class="status-offline"><i class="fas fa-circle"></i>${t('peer_offline')}</span>`;
             return `<tr><td>${i+1}</td><td><span class="computer-id">${escapeHtml(p.id)}</span></td>
             <td><span class="computer-name">${escapeHtml(name)}</span></td>
-            <td>${escapeHtml(p.username||'')}</td><td>${escapeHtml(p.platform||'—')}</td><td>${tags||'—'}</td>
+            <td>${escapeHtml(p.username||'')}</td><td>${escapeHtml(p.platform||'—')}</td><td>${status}</td><td>${tags||'—'}</td>
             <td><div class="action-cell">
                 <button class="btn btn-warn btn-sm" data-i18n-title="connect" onclick="connectPeer('${escapeHtml(p.id)}')"><i class="fas fa-plug"></i></button>
                 ${canWrite()?`<button class="btn btn-ghost btn-sm" data-i18n-title="edit" onclick="openPeerModal(${i},true)"><i class="fas fa-edit"></i></button>`:''}
