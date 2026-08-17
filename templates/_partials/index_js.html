@@ -4,6 +4,7 @@
     let allComputers = []; let currentPage = 1; let itemsPerPage = 20;
     let autoRefreshInterval = null; let sessionCheckInterval = null; let activityTimeout = null;
     let currentTooltipComputer = null; let isTooltipPinned = false;
+    let currentSort = {column: 'last_online', direction: 'desc'};
 
     async function checkSession() {
         try {
@@ -89,9 +90,44 @@
         });
     }
 
+    function sortValue(c, column){
+        switch(column){
+            case 'hostname': return (c.hostname||'').toLowerCase();
+            case 'id': return (c.id||'').toLowerCase();
+            case 'username': return (c.username||'').toLowerCase();
+            case 'ip': return (c.ip||'').toLowerCase();
+            case 'status': return isOnline(c.last_online)?1:0;
+            case 'last_online': return c.last_online?new Date(c.last_online).getTime():0;
+            default: return 0;
+        }
+    }
+    function sortComputers(list){
+        const col=currentSort.column, dir=currentSort.direction==='asc'?1:-1;
+        return [...list].sort((a,b)=>{
+            const av=sortValue(a,col), bv=sortValue(b,col);
+            if(typeof av==='string') return av.localeCompare(bv,undefined,{numeric:true})*dir;
+            return (av<bv?-1:av>bv?1:0)*dir;
+        });
+    }
+    function sortBy(column){
+        if(currentSort.column===column) currentSort.direction=currentSort.direction==='asc'?'desc':'asc';
+        else currentSort={column, direction:(column==='last_online'||column==='status')?'desc':'asc'};
+        currentPage=1; updateDisplay();
+    }
+    function updateSortIcons(){
+        document.querySelectorAll('#computersTable thead th.sortable').forEach(th=>{
+            const icon=th.querySelector('.sort-icon'); if(!icon) return;
+            if(th.dataset.sort===currentSort.column){
+                icon.className='fas sort-icon '+(currentSort.direction==='asc'?'fa-sort-up':'fa-sort-down');
+                th.classList.add('sorted');
+            } else { icon.className='fas fa-sort sort-icon'; th.classList.remove('sorted'); }
+        });
+    }
+
     function updateDisplay(){
         const term=document.getElementById('searchInput').value;
-        const filtered = term ? filterComputers() : allComputers;
+        const filtered = sortComputers(term ? filterComputers() : allComputers);
+        updateSortIcons();
         document.getElementById('searchInfo').textContent = term
             ? t('found_of',{found:filtered.length,total:allComputers.length})
             : t('total_devices',{total:allComputers.length});

@@ -27,12 +27,12 @@
             <thead>
                 <tr>
                     <th data-i18n="col_num">№</th>
-                    <th data-i18n="col_device_name">Имя устройства</th>
-                    <th data-i18n="col_device_id">ID оборудования</th>
-                    <th data-i18n="col_user">Пользователь</th>
-                    <th data-i18n="col_ip">IP адрес</th>
-                    <th data-i18n="col_status">Статус</th>
-                    <th data-i18n="col_last_contact">Последний контакт</th>
+                    <th class="sortable" data-sort="hostname" onclick="sortBy('hostname')"><span data-i18n="col_device_name">Имя устройства</span> <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable" data-sort="id" onclick="sortBy('id')"><span data-i18n="col_device_id">ID оборудования</span> <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable" data-sort="username" onclick="sortBy('username')"><span data-i18n="col_user">Пользователь</span> <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable" data-sort="ip" onclick="sortBy('ip')"><span data-i18n="col_ip">IP адрес</span> <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable" data-sort="status" onclick="sortBy('status')"><span data-i18n="col_status">Статус</span> <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable" data-sort="last_online" onclick="sortBy('last_online')"><span data-i18n="col_last_contact">Последний контакт</span> <i class="fas fa-sort sort-icon"></i></th>
                     <th data-i18n="col_actions">Действия</th>
                 </tr>
             </thead>

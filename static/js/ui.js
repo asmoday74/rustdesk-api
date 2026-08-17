@@ -82,6 +82,10 @@
     }
     window.setLang = setLang;
 
+    // Язык определяется сразу: инлайн-скрипты страниц строят константы
+    // (CONN_TYPES, RULE_NAMES...) через t() ещё до DOMContentLoaded.
+    if (window.I18N) window.I18N.lang = currentLang();
+
     function injectLangSwitch() {
         document.querySelectorAll('[data-lang-switch]').forEach(function (host) {
             var sel = document.createElement('select');
@@ -99,7 +103,6 @@
     }
 
     function init() {
-        if (window.I18N) window.I18N.lang = currentLang();
         document.documentElement.setAttribute('lang', currentLang());
         installAuthRedirect();
         // Переключатель темы показываем только если шаблон поддерживает темы.

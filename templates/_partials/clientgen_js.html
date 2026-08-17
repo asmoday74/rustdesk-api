@@ -8,6 +8,7 @@
     const OS_ICON={windows:'fab fa-windows', linux:'fab fa-linux', macos:'fab fa-apple', android:'fab fa-android'};
     let configs=[], editCfgId=null, curOs='windows';
     let images={icon:'', logo:''};
+    let originalPassword='', isChangePassActive=false;
 
     function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString(t('locale')); }
     function val(id){ return document.getElementById(id).value; }
@@ -91,6 +92,63 @@
         document.getElementById('cgDefaultRow').classList.toggle('show', chk('cgDefaultOn'));
     }
 
+    /* ---------- пароль ---------- */
+    function resetPassInput(){
+        const inp=document.getElementById('cgPassValue');
+        inp.value=''; inp.type='password';
+        document.getElementById('cgPassToggleIcon').className='fas fa-eye';
+        document.getElementById('cgPassToggle').setAttribute('data-i18n-title','cg_show_pass');
+        document.getElementById('cgPassToggle').title=t('cg_show_pass');
+        setErr('errPass','');
+    }
+    function togglePassVisibility(){
+        const inp=document.getElementById('cgPassValue');
+        const icon=document.getElementById('cgPassToggleIcon');
+        const btn=document.getElementById('cgPassToggle');
+        if(inp.type==='password'){ inp.type='text'; icon.className='fas fa-eye-slash';
+            btn.setAttribute('data-i18n-title','cg_hide_pass'); btn.title=t('cg_hide_pass'); }
+        else { inp.type='password'; icon.className='fas fa-eye';
+            btn.setAttribute('data-i18n-title','cg_show_pass'); btn.title=t('cg_show_pass'); }
+    }
+    function setupPasswordSection(){
+        const switchRow=document.getElementById('cgPresetPassRow');
+        const passRow=document.getElementById('cgPassRow');
+        const changeRow=document.getElementById('cgChangePassRow');
+        isChangePassActive=false;
+        resetPassInput();
+        if(editCfgId===null){
+            // создание: переключатель + поле пароля
+            switchRow.style.display='';
+            changeRow.style.display='none';
+            passRow.classList.toggle('show', chk('cgPresetPass'));
+        } else {
+            // редактирование: поле скрыто, кнопка «Сменить пароль»
+            switchRow.style.display='none';
+            passRow.classList.remove('show');
+            changeRow.style.display='';
+            document.getElementById('cgChangePassBtn').style.display='inline-flex';
+            document.getElementById('cgKeepPassBtn').style.display='none';
+        }
+    }
+    function startChangePassword(){
+        isChangePassActive=true;
+        resetPassInput();
+        document.getElementById('cgPassRow').classList.add('show');
+        document.getElementById('cgChangePassBtn').style.display='none';
+        document.getElementById('cgKeepPassBtn').style.display='inline-flex';
+    }
+    function keepOldPassword(){
+        isChangePassActive=false;
+        document.getElementById('cgPassRow').classList.remove('show');
+        document.getElementById('cgChangePassBtn').style.display='inline-flex';
+        document.getElementById('cgKeepPassBtn').style.display='none';
+        resetPassInput();
+    }
+    function collectPermanentPassword(){
+        if(editCfgId===null) return chk('cgPresetPass')?val('cgPassValue').trim():'';
+        return isChangePassActive?val('cgPassValue').trim():originalPassword;
+    }
+
     function copyKey(){
         const v=val('cgKey'); if(!v) return;
         navigator.clipboard.writeText(v).then(()=>showToast(t('cg_key_copied')));
@@ -155,8 +213,7 @@
             document.getElementById('cgNote').value=cfg.note||'';
             if(cfg.iconbase64) setImage('icon',cfg.iconbase64,'');
             if(cfg.logobase64) setImage('logo',cfg.logobase64,'');
-            if(cfg.permanentPassword){ document.getElementById('cgPresetPass').checked=true;
-                document.getElementById('cgPassValue').value=cfg.permanentPassword; }
+            originalPassword=cfg.permanentPassword||'';
             if(cfg.overrideManual){ document.getElementById('cgOverrideOn').checked=true;
                 document.getElementById('cgOverrideManual').value=cfg.overrideManual; }
             if(cfg.defaultManual){ document.getElementById('cgDefaultOn').checked=true;
@@ -164,8 +221,9 @@
         } else {
             setOs('windows');
             document.getElementById('cgArch').value='x64';
+            originalPassword='';
         }
-        togglePresetPass(); toggleAdvanced();
+        setupPasswordSection(); toggleAdvanced();
         showEditor(true);
     }
 
@@ -186,7 +244,7 @@
             apiServer: val('cgApi').trim(),
             iconbase64: images.icon,
             logobase64: images.logo,
-            permanentPassword: chk('cgPresetPass')?val('cgPassValue').trim():'',
+            permanentPassword: collectPermanentPassword(),
             overrideManual: chk('cgOverrideOn')?val('cgOverrideManual'):'',
             defaultManual: chk('cgDefaultOn')?val('cgDefaultManual'):'',
             note: val('cgNote').trim()
@@ -199,7 +257,10 @@
         else if(!/^[A-Za-z0-9_-]+$/.test(name)){ setErr('errName',t('cg_name_format')); ok=false; }
         if(!cfg.appname){ setErr('errAppName',t('cg_required')); ok=false; }
         else if(!cfg.appname.split('').every(c=>c.charCodeAt(0)<128)){ setErr('errAppName',t('cg_english_only')); ok=false; }
-        if(chk('cgPresetPass') && !cfg.permanentPassword){ setErr('errPass',t('cg_required')); ok=false; }
+        // создание: пароль обязателен при включённом переключателе;
+        // редактирование: только если запрошена смена пароля
+        const passRequired = editCfgId===null ? chk('cgPresetPass') : isChangePassActive;
+        if(passRequired && !cfg.permanentPassword){ setErr('errPass',t('cg_required')); ok=false; }
         return ok;
     }
 

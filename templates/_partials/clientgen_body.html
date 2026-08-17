@@ -126,14 +126,21 @@
 
             <div class="panel cg-section">
                 <h3 data-i18n="cg_security">Security</h3>
-                <div class="cg-switch-row">
+                <div class="cg-switch-row" id="cgPresetPassRow">
                     <span data-i18n="cg_preset_pass">Preset password :</span>
                     <label class="switch"><input type="checkbox" id="cgPresetPass" onchange="togglePresetPass()"><span class="slider"></span></label>
                 </div>
                 <div class="form-group cg-field cg-collapsible" id="cgPassRow" style="margin-bottom:0;">
                     <label for="cgPassValue" data-i18n="cg_perm_pass">Permanent password</label>
-                    <input type="text" id="cgPassValue" data-i18n-ph="cg_enter" placeholder="Please enter">
+                    <div class="cg-pass-row">
+                        <input type="password" id="cgPassValue" data-i18n-ph="cg_enter" placeholder="Please enter">
+                        <button type="button" class="icon-btn" id="cgPassToggle" data-i18n-title="cg_show_pass" title="Показать пароль" onclick="togglePassVisibility()"><i class="fas fa-eye" id="cgPassToggleIcon"></i></button>
+                    </div>
                     <div class="cg-err" id="errPass"></div>
+                </div>
+                <div class="form-group cg-field" id="cgChangePassRow" style="display:none;margin-bottom:0;">
+                    <button type="button" class="btn btn-ghost" id="cgChangePassBtn" onclick="startChangePassword()"><i class="fas fa-key"></i> <span data-i18n="cg_change_pass">Сменить пароль</span></button>
+                    <button type="button" class="btn btn-ghost" id="cgKeepPassBtn" style="display:none;" onclick="keepOldPassword()"><i class="fas fa-undo"></i> <span data-i18n="cg_keep_pass">Оставить старый пароль</span></button>
                 </div>
             </div>
 

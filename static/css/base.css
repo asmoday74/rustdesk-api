@@ -111,6 +111,11 @@ a { color: var(--accent); }
 .computers-table tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
 .computers-table tbody tr:hover { background: var(--panel-2); }
 .computers-table td { padding: 12px 14px; font-size: .86rem; color: var(--text); vertical-align: middle; }
+.computers-table thead th.sortable { cursor: pointer; user-select: none; }
+.computers-table thead th.sortable:hover { color: var(--accent); }
+.computers-table thead th.sortable .sort-icon { margin-left: 5px; font-size: .72rem; opacity: .55; }
+.computers-table thead th.sortable.sorted { color: var(--accent); }
+.computers-table thead th.sortable.sorted .sort-icon { opacity: 1; }
 
 .computer-name { font-weight: 600; color: var(--text); display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .computer-name i { color: var(--accent); }
@@ -224,6 +229,8 @@ a { color: var(--accent); }
 
 .cg-key-row { display: flex; gap: 6px; }
 .cg-key-row input { flex: 1; }
+.cg-pass-row { display: flex; gap: 6px; }
+.cg-pass-row input { flex: 1; }
 
 .cg-upload {
     display: inline-flex; align-items: center; gap: 9px; padding: 8px 14px;
