@@ -324,6 +324,10 @@ def init_db():
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
         """)
+        # Миграция: поля встроенного генератора (GitHub Actions)
+        cursor.execute("ALTER TABLE client_configs ADD COLUMN IF NOT EXISTS uuid TEXT DEFAULT ''")
+        cursor.execute("ALTER TABLE client_configs ADD COLUMN IF NOT EXISTS github_run_id TEXT DEFAULT ''")
+        cursor.execute("ALTER TABLE client_configs ADD COLUMN IF NOT EXISTS build_token TEXT DEFAULT ''")
 
         # Аудит подключений клиентов RustDesk (/api/audit/*)
         cursor.execute("""

@@ -13,22 +13,24 @@
 </head>
 <body>
 <div class="login-wrapper">
+    <span class="login-lang" data-lang-switch></span>
     <div class="panel login-card">
         <div class="panel-body">
             <div class="login-header">
                 <i class="fas fa-tree"></i>
                 <h1>НПАО «Светогорский ЦБК»</h1>
-                <p>Вход в систему мониторинга</p>
+                <p data-i18n="login_subtitle_sve">Вход в систему мониторинга</p>
             </div>
-            <div class="error-message" id="errorMsg">Неверный логин или пароль</div>
+            <div class="error-message" id="errorMsg" data-i18n="invalid_credentials">Неверный логин или пароль</div>
             <form id="loginForm">
-                <div class="form-group"><label>Логин</label><input type="text" id="username" required autofocus></div>
-                <div class="form-group"><label>Пароль</label><input type="password" id="password" required></div>
-                <button type="submit" class="btn btn-primary btn-login">Войти</button>
+                <div class="form-group"><label data-i18n="login_label">Логин</label><input type="text" id="username" required autofocus></div>
+                <div class="form-group"><label data-i18n="password_label">Пароль</label><input type="password" id="password" required></div>
+                <button type="submit" class="btn btn-primary btn-login" data-i18n="sign_in">Войти</button>
             </form>
         </div>
     </div>
 </div>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/ui.js"></script>
 <script>
     document.getElementById('loginForm').addEventListener('submit', async (e) => {

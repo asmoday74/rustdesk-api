@@ -1,19 +1,22 @@
 <script>
+    const IS_ADMIN = {% if is_admin %}true{% else %}false{% endif %};
     let collections=[]; let groupsList=[]; let groupUsers=[]; let currentAb=null; let currentPeers=[]; let currentTags=[];
     let editingPeer=null; let shareCollectionId=null; let personalGuid='';
+    let allGroups=[]; let currentGroupId=null;
     let sessionCheckInterval=null; let activityTimeout=null;
-    const RULE_NAMES={1:'Чтение',2:'Чтение/запись',3:'Полный доступ'};
+    const RULE_NAMES={1:t('rule_read'),2:t('rule_readwrite'),3:t('rule_full')};
+    const GROUP_TYPES={1:t('group_type_default_short'),2:t('group_type_shared_short')};
 
     async function checkSession(){ try{ const r=await fetch('/api/session/check'); const d=await r.json();
-        if(!d.active){ showToast('Сессия истекла',true); setTimeout(()=>window.location.href='/login',2000); return false;} return true; }catch(e){return true;} }
+        if(!d.active){ showToast(t('session_expired'),true); setTimeout(()=>window.location.href='/login',2000); return false;} return true; }catch(e){return true;} }
     async function extendSession(){ try{await fetch('/api/session/extend',{method:'POST'});}catch(e){} }
     function updateActivity(){ extendSession(); if(activityTimeout) clearTimeout(activityTimeout); activityTimeout=setTimeout(()=>checkSession(),120000); }
     document.addEventListener('click',updateActivity); document.addEventListener('keypress',updateActivity);
     sessionCheckInterval=setInterval(async()=>{ if(!await checkSession()) clearInterval(sessionCheckInterval); },60000);
 
-    function showToast(m,err=false){ const t=document.getElementById('toast'); const msg=document.getElementById('toastMessage'); const i=t.querySelector('i');
+    function showToast(m,err=false){ const tEl=document.getElementById('toast'); const msg=document.getElementById('toastMessage'); const i=tEl.querySelector('i');
         msg.textContent=m; i.className=err?'fas fa-exclamation-triangle':'fas fa-check-circle';
-        t.style.borderLeftColor=err?'var(--danger)':'var(--accent)'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+        tEl.style.borderLeftColor=err?'var(--danger)':'var(--accent)'; tEl.classList.add('show'); setTimeout(()=>tEl.classList.remove('show'),3000); }
     function escapeHtml(s){ if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
     function closeModal(id){ document.getElementById(id).classList.remove('active'); }
     function openModal(id){ document.getElementById(id).classList.add('active'); }
@@ -22,15 +25,15 @@
     function canWrite(){ return currentAb && currentAb.rule>=2; }
     function canFull(){ return currentAb && currentAb.rule>=3; }
     async function apiFetch(url,opt={}){ const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opt});
-        if(!r.ok){ let m='Ошибка '+r.status; try{ const d=await r.json(); if(d.error)m=d.error; }catch(e){} throw new Error(m); }
-        const t=await r.text(); return t?JSON.parse(t):null; }
+        if(!r.ok){ let m=t('error')+' '+r.status; try{ const d=await r.json(); if(d.error)m=d.error; }catch(e){} throw new Error(m); }
+        const tx=await r.text(); return tx?JSON.parse(tx):null; }
 
     async function loadCollections(){
         const personal=await apiFetch('/api/ab/personal',{method:'POST'});
         personalGuid=(personal&&personal.guid)||'';
         collections=await apiFetch('/api/web/ab/collections');
         const sel=document.getElementById('abSelector'); sel.innerHTML='';
-        const o=document.createElement('option'); o.value=personalGuid; o.textContent='Личная адресная книга'; sel.appendChild(o);
+        const o=document.createElement('option'); o.value=personalGuid; o.textContent=t('personal_ab'); sel.appendChild(o);
         collections.forEach(c=>{ const op=document.createElement('option'); op.value=c.guid; op.textContent=`${c.name} (${c.owner})`; sel.appendChild(op); });
         currentAb={guid:personalGuid,rule:3,own:true};
         await loadAll();
@@ -51,120 +54,162 @@
         currentTags=r||[]; document.getElementById('tagCount').textContent=currentTags.length; }catch(e){ currentTags=[]; } }
 
     function getFiltered(){ const term=document.getElementById('peerSearch').value.toLowerCase(); if(!term)return currentPeers;
-        return currentPeers.filter(p=>(p.id||'').toLowerCase().includes(term)||(p.hostname||'').toLowerCase().includes(term)||(p.alias||'').toLowerCase().includes(term)||(p.username||'').toLowerCase().includes(term)||(p.tags||[]).some(t=>t.toLowerCase().includes(term))); }
+        return currentPeers.filter(p=>(p.id||'').toLowerCase().includes(term)||(p.hostname||'').toLowerCase().includes(term)||(p.alias||'').toLowerCase().includes(term)||(p.username||'').toLowerCase().includes(term)||(p.tags||[]).some(tg=>tg.toLowerCase().includes(term))); }
 
     function renderPeers(){ const tb=document.getElementById('peersTableBody'); const list=getFiltered();
-        if(!list.length){ tb.innerHTML='<tr><td colspan="7" class="empty-state"><i class="fas fa-book"></i>Записей нет</td></tr>'; return; }
-        const colorByName={}; currentTags.forEach(t=>colorByName[t.name]=t.color);
-        tb.innerHTML=list.map((p,i)=>{ const name=p.alias||p.hostname||'Без имени';
-            const tags=(p.tags||[]).map(t=>`<span class="tag-badge" style="background:${colorByName[t]?colorToHex(colorByName[t]):'var(--accent)'}">${escapeHtml(t)}</span>`).join('');
+        if(!list.length){ tb.innerHTML=`<tr><td colspan="7" class="empty-state"><i class="fas fa-book"></i>${t('no_records')}</td></tr>`; return; }
+        const colorByName={}; currentTags.forEach(tg=>colorByName[tg.name]=tg.color);
+        tb.innerHTML=list.map((p,i)=>{ const name=p.alias||p.hostname||t('no_name');
+            const tags=(p.tags||[]).map(tg=>`<span class="tag-badge" style="background:${colorByName[tg]?colorToHex(colorByName[tg]):'var(--accent)'}">${escapeHtml(tg)}</span>`).join('');
             return `<tr><td>${i+1}</td><td><span class="computer-id">${escapeHtml(p.id)}</span></td>
             <td><span class="computer-name">${escapeHtml(name)}</span></td>
             <td>${escapeHtml(p.username||'')}</td><td>${escapeHtml(p.platform||'—')}</td><td>${tags||'—'}</td>
             <td><div class="action-cell">
-                <button class="btn btn-warn btn-sm" onclick="connectPeer('${escapeHtml(p.id)}')"><i class="fas fa-plug"></i></button>
-                ${canWrite()?`<button class="btn btn-ghost btn-sm" onclick="openPeerModal(${i},true)"><i class="fas fa-edit"></i></button>`:''}
-                ${canFull()?`<button class="btn btn-danger btn-sm" onclick="deletePeer('${escapeHtml(p.id)}')"><i class="fas fa-trash"></i></button>`:''}
-            </div></td></tr>`; }).join(''); }
+                <button class="btn btn-warn btn-sm" data-i18n-title="connect" onclick="connectPeer('${escapeHtml(p.id)}')"><i class="fas fa-plug"></i></button>
+                ${canWrite()?`<button class="btn btn-ghost btn-sm" data-i18n-title="edit" onclick="openPeerModal(${i},true)"><i class="fas fa-edit"></i></button>`:''}
+                ${canFull()?`<button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="deletePeer('${escapeHtml(p.id)}')"><i class="fas fa-trash"></i></button>`:''}
+            </div></td></tr>`; }).join('');
+        applyI18n(tb); }
     function connectPeer(id){ if(id) window.location.href=`rustdesk://connection/new/${id}`; }
 
     function renderPeerTags(selected){ const c=document.getElementById('peerTagsList');
-        if(!currentTags.length){ c.innerHTML='<span style="color:var(--muted);font-size:.8rem;">Тегов нет</span>'; return; }
-        c.innerHTML=currentTags.map(t=>`<label><input type="checkbox" value="${escapeHtml(t.name)}" ${selected.includes(t.name)?'checked':''}> ${escapeHtml(t.name)}</label>`).join(''); }
+        if(!currentTags.length){ c.innerHTML=`<span style="color:var(--muted);font-size:.8rem;">${t('no_tags')}</span>`; return; }
+        c.innerHTML=currentTags.map(tg=>`<label><input type="checkbox" value="${escapeHtml(tg.name)}" ${selected.includes(tg.name)?'checked':''}> ${escapeHtml(tg.name)}</label>`).join(''); }
     function getSelectedTags(){ return [...document.querySelectorAll('#peerTagsList input:checked')].map(x=>x.value); }
 
     function openPeerModal(idx=null,isEdit=false){ editingPeer=null; document.getElementById('peerForm').reset(); peerId.disabled=false;
         if(isEdit&&idx!==null){ const p=getFiltered()[idx]; if(!p)return; editingPeer=p;
-            peerModalTitle.textContent='Редактировать'; peerId.value=p.id||''; peerId.disabled=true;
+            peerModalTitle.textContent=t('edit_record'); peerId.value=p.id||''; peerId.disabled=true;
             peerAlias.value=p.alias||''; peerHostname.value=p.hostname||''; peerUsername.value=p.username||'';
             peerPlatform.value=p.platform||''; peerPassword.value=p.password||''; peerNote.value=p.note||'';
             peerForceRelay.checked=(p.forceAlwaysRelay===true||p.forceAlwaysRelay==='true');
             renderPeerTags(p.tags||[]); }
-        else { peerModalTitle.textContent='Добавить запись'; renderPeerTags([]); }
+        else { peerModalTitle.textContent=t('add_record'); renderPeerTags([]); }
         openModal('peerModal'); }
 
     async function savePeer(e){ e.preventDefault(); const guid=guidForApi(); const tags=getSelectedTags();
         try{ if(editingPeer){ await apiFetch(`/api/ab/peer/update/${encodeURIComponent(guid)}`,{method:'PUT',body:JSON.stringify({
                 id:editingPeer.id, alias:peerAlias.value, password:peerPassword.value, note:peerNote.value, tags:tags})});
-            showToast('Запись обновлена'); }
+            showToast(t('record_updated')); }
           else { await apiFetch(`/api/ab/peer/add/${encodeURIComponent(guid)}`,{method:'POST',body:JSON.stringify({
                 id:peerId.value.trim(), alias:peerAlias.value, hostname:peerHostname.value, username:peerUsername.value,
                 platform:peerPlatform.value, password:peerPassword.value, note:peerNote.value,
                 forceAlwaysRelay:peerForceRelay.checked?'true':'false', tags:tags, hash:'', online:false, same_server:false})});
-            showToast('Запись добавлена'); }
+            showToast(t('record_added')); }
           closeModal('peerModal'); await loadPeers(); }catch(err){ showToast(err.message,true); } }
 
-    async function deletePeer(id){ if(!confirm(`Удалить запись "${id}"?`))return;
-        try{ await apiFetch(`/api/ab/peer/${encodeURIComponent(guidForApi())}`,{method:'DELETE',body:JSON.stringify([id])}); showToast('Удалено'); await loadPeers(); }
+    async function deletePeer(id){ if(!confirm(t('confirm_delete_record',{id})))return;
+        try{ await apiFetch(`/api/ab/peer/${encodeURIComponent(guidForApi())}`,{method:'DELETE',body:JSON.stringify([id])}); showToast(t('deleted')); await loadPeers(); }
         catch(e){ showToast(e.message,true); } }
 
     // Теги
     async function openTagsModal(){ await loadTags(); renderTagsList(); openModal('tagsModal'); }
     function renderTagsList(){ const c=document.getElementById('tagsList');
-        if(!currentTags.length){ c.innerHTML='<p style="color:var(--muted);">Тегов нет</p>'; return; }
-        c.innerHTML=currentTags.map(t=>`<div class="tag-row">
-            <span class="tag-badge" style="background:${colorToHex(t.color)}">${escapeHtml(t.name)}</span>
+        if(!currentTags.length){ c.innerHTML=`<p style="color:var(--muted);">${t('no_tags')}</p>`; return; }
+        c.innerHTML=currentTags.map(tg=>`<div class="tag-row">
+            <span class="tag-badge" style="background:${colorToHex(tg.color)}">${escapeHtml(tg.name)}</span>
             <span style="flex:1;"></span>
-            ${canWrite()?`<input type="color" value="${colorToHex(t.color)}" onchange="updateTagColor('${escapeHtml(t.name)}',this.value)" style="width:40px;height:28px;border:1px solid var(--border);border-radius:4px;">
-            <button class="btn btn-ghost btn-sm" onclick="renameTag('${escapeHtml(t.name)}')"><i class="fas fa-edit"></i></button>`:''}
-            ${canFull()?`<button class="btn btn-danger btn-sm" onclick="deleteTag('${escapeHtml(t.name)}')"><i class="fas fa-trash"></i></button>`:''}
-        </div>`).join(''); }
+            ${canWrite()?`<input type="color" value="${colorToHex(tg.color)}" onchange="updateTagColor('${escapeHtml(tg.name)}',this.value)" style="width:40px;height:28px;border:1px solid var(--border);border-radius:4px;">
+            <button class="btn btn-ghost btn-sm" data-i18n-title="rename" onclick="renameTag('${escapeHtml(tg.name)}')"><i class="fas fa-edit"></i></button>`:''}
+            ${canFull()?`<button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="deleteTag('${escapeHtml(tg.name)}')"><i class="fas fa-trash"></i></button>`:''}
+        </div>`).join('');
+        applyI18n(c); }
     async function addTag(e){ e.preventDefault(); const name=newTagName.value.trim(); if(!name)return;
         try{ await apiFetch(`/api/ab/tag/add/${encodeURIComponent(guidForApi())}`,{method:'POST',body:JSON.stringify({name,color:hexToColor(newTagColor.value)})});
-            newTagName.value=''; showToast('Тег добавлен'); await loadTags(); renderTagsList(); }catch(err){showToast(err.message,true);} }
-    async function renameTag(old){ const nw=prompt('Новое имя тега:',old); if(!nw||nw===old)return;
-        try{ await apiFetch(`/api/ab/tag/rename/${encodeURIComponent(guidForApi())}`,{method:'PUT',body:JSON.stringify({old,new:nw})}); showToast('Переименован'); await loadTags(); renderTagsList(); }catch(e){showToast(e.message,true);} }
-    async function updateTagColor(name,hex){ try{ await apiFetch(`/api/ab/tag/update/${encodeURIComponent(guidForApi())}`,{method:'PUT',body:JSON.stringify({name,color:hexToColor(hex)})}); showToast('Цвет обновлён'); await loadTags(); }catch(e){showToast(e.message,true);} }
-    async function deleteTag(name){ if(!confirm(`Удалить тег "${name}"?`))return;
-        try{ await apiFetch(`/api/ab/tag/${encodeURIComponent(guidForApi())}`,{method:'DELETE',body:JSON.stringify([name])}); showToast('Удалён'); await loadTags(); renderTagsList(); }catch(e){showToast(e.message,true);} }
+            newTagName.value=''; showToast(t('tag_added')); await loadTags(); renderTagsList(); }catch(err){showToast(err.message,true);} }
+    async function renameTag(old){ const nw=prompt(t('new_tag_name_prompt'),old); if(!nw||nw===old)return;
+        try{ await apiFetch(`/api/ab/tag/rename/${encodeURIComponent(guidForApi())}`,{method:'PUT',body:JSON.stringify({old,new:nw})}); showToast(t('renamed')); await loadTags(); renderTagsList(); }catch(e){showToast(e.message,true);} }
+    async function updateTagColor(name,hex){ try{ await apiFetch(`/api/ab/tag/update/${encodeURIComponent(guidForApi())}`,{method:'PUT',body:JSON.stringify({name,color:hexToColor(hex)})}); showToast(t('color_updated')); await loadTags(); }catch(e){showToast(e.message,true);} }
+    async function deleteTag(name){ if(!confirm(t('confirm_delete_tag',{name})))return;
+        try{ await apiFetch(`/api/ab/tag/${encodeURIComponent(guidForApi())}`,{method:'DELETE',body:JSON.stringify([name])}); showToast(t('deleted')); await loadTags(); renderTagsList(); }catch(e){showToast(e.message,true);} }
 
-    // Коллекции
+    // Общие книги (коллекции адресной книги)
     async function openCollectionsModal(){ await loadCollectionsList(); openModal('collectionsModal'); }
     async function loadCollectionsList(){ const c=document.getElementById('collectionsList');
         const own=collections.filter(x=>x.own); const shared=collections.filter(x=>!x.own);
         let html='';
-        if(own.length) html+='<h4 style="margin:6px 0;">Мои общие книги</h4>'+own.map(x=>`<div class="rule-row">
+        if(own.length) html+=`<h4 style="margin:6px 0;">${t('my_shared_books')}</h4>`+own.map(x=>`<div class="rule-row">
             <i class="fas fa-book"></i><b style="flex:1;">${escapeHtml(x.name)}</b>
-            <button class="btn btn-ghost btn-sm" onclick="openShareModal(${x.id},'${escapeHtml(x.name)}')"><i class="fas fa-share-alt"></i></button>
-            <button class="btn btn-ghost btn-sm" onclick="renameCollection(${x.id},'${escapeHtml(x.name)}')"><i class="fas fa-edit"></i></button>
-            <button class="btn btn-danger btn-sm" onclick="deleteCollection(${x.id},'${escapeHtml(x.name)}')"><i class="fas fa-trash"></i></button></div>`).join('');
-        if(shared.length) html+='<h4 style="margin:6px 0;">Доступные мне</h4>'+shared.map(x=>`<div class="rule-row">
+            <button class="btn btn-ghost btn-sm" data-i18n-title="share" onclick="openShareModal(${x.id},'${escapeHtml(x.name)}')"><i class="fas fa-share-alt"></i></button>
+            <button class="btn btn-ghost btn-sm" data-i18n-title="rename" onclick="renameCollection(${x.id},'${escapeHtml(x.name)}')"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="deleteCollection(${x.id},'${escapeHtml(x.name)}')"><i class="fas fa-trash"></i></button></div>`).join('');
+        if(shared.length) html+=`<h4 style="margin:6px 0;">${t('available_books')}</h4>`+shared.map(x=>`<div class="rule-row">
             <i class="fas fa-book-open"></i><b style="flex:1;">${escapeHtml(x.name)} (${escapeHtml(x.owner)})</b>
             <span class="tag-badge">${RULE_NAMES[x.rule]||x.rule}</span></div>`).join('');
-        c.innerHTML=html||'<p style="color:var(--muted);">Общих книг нет</p>'; }
+        c.innerHTML=html||`<p style="color:var(--muted);">${t('no_shared_books')}</p>`;
+        applyI18n(c); }
     async function createCollection(e){ e.preventDefault(); const name=newCollectionName.value.trim(); if(!name)return;
         try{ await apiFetch('/api/web/ab/collections',{method:'POST',body:JSON.stringify({name})}); newCollectionName.value='';
-            showToast('Создано'); await loadCollectionsList(); await refreshSelector(); }catch(err){showToast(err.message,true);} }
-    async function renameCollection(id,old){ const nw=prompt('Новое имя:',old); if(!nw||nw===old)return;
-        try{ await apiFetch(`/api/web/ab/collections/${id}`,{method:'PUT',body:JSON.stringify({name:nw})}); showToast('Переименовано'); await loadCollectionsList(); await refreshSelector(); }catch(e){showToast(e.message,true);} }
-    async function deleteCollection(id,name){ if(!confirm(`Удалить "${name}" и все записи?`))return;
-        try{ await apiFetch(`/api/web/ab/collections/${id}`,{method:'DELETE'}); showToast('Удалено'); await loadCollectionsList(); await refreshSelector(); }catch(e){showToast(e.message,true);} }
+            showToast(t('created')); await loadCollectionsList(); await refreshSelector(); }catch(err){showToast(err.message,true);} }
+    async function renameCollection(id,old){ const nw=prompt(t('new_name_prompt'),old); if(!nw||nw===old)return;
+        try{ await apiFetch(`/api/web/ab/collections/${id}`,{method:'PUT',body:JSON.stringify({name:nw})}); showToast(t('renamed')); await loadCollectionsList(); await refreshSelector(); }catch(e){showToast(e.message,true);} }
+    async function deleteCollection(id,name){ if(!confirm(t('confirm_delete_collection',{name})))return;
+        try{ await apiFetch(`/api/web/ab/collections/${id}`,{method:'DELETE'}); showToast(t('deleted')); await loadCollectionsList(); await refreshSelector(); }catch(e){showToast(e.message,true);} }
     async function refreshSelector(){ const cur=currentAb?currentAb.guid:personalGuid;
         collections=await apiFetch('/api/web/ab/collections'); const sel=document.getElementById('abSelector');
-        sel.innerHTML=`<option value="${personalGuid}">Личная адресная книга</option>`+collections.map(c=>`<option value="${c.guid}">${escapeHtml(c.name)} (${escapeHtml(c.owner)})</option>`).join('');
+        sel.innerHTML=`<option value="${personalGuid}">${t('personal_ab')}</option>`+collections.map(c=>`<option value="${c.guid}">${escapeHtml(c.name)} (${escapeHtml(c.owner)})</option>`).join('');
         if(cur!==personalGuid && !collections.find(c=>c.guid===cur)){ sel.value=personalGuid; currentAb={guid:personalGuid,rule:3,own:true}; await loadAll(); }
         else sel.value=cur; }
 
     // Шаринг
-    async function openShareModal(id,name){ shareCollectionId=id; shareModalTitle.textContent=`Общий доступ: ${name}`;
+    async function openShareModal(id,name){ shareCollectionId=id; shareModalTitle.textContent=`${t('share_title')}: ${name}`;
         try{ if(!groupUsers.length) groupUsers=await apiFetch('/api/web/ab/users');
             groupsList=await apiFetch('/api/web/groups');
             ruleType.value='1'; onRuleTypeChange(); await loadRules(); openModal('shareModal'); }catch(e){showToast(e.message,true);} }
-    async function onRuleTypeChange(){ const t=ruleType.value; const sel=ruleUser;
-        if(t==='2'){ ruleTargetLabel.textContent='Группа'; sel.innerHTML=groupsList.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join(''); }
-        else { ruleTargetLabel.textContent='Пользователь'; const me=await (await fetch('/api/users/me')).json();
+    async function onRuleTypeChange(){ const tp=ruleType.value; const sel=ruleUser;
+        if(tp==='2'){ ruleTargetLabel.textContent=t('group'); sel.innerHTML=groupsList.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join(''); }
+        else { ruleTargetLabel.textContent=t('user_label'); const me=await (await fetch('/api/users/me')).json();
             sel.innerHTML=groupUsers.filter(u=>u.id!==me.id).map(u=>`<option value="${u.id}">${escapeHtml(u.username)}</option>`).join(''); } }
     async function loadRules(){ const rules=await apiFetch(`/api/web/ab/rules/${shareCollectionId}`);
         const c=document.getElementById('rulesList');
-        if(!rules||!rules.length){ c.innerHTML='<p style="color:var(--muted);">Доступ никому не предоставлен</p>'; return; }
+        if(!rules||!rules.length){ c.innerHTML=`<p style="color:var(--muted);">${t('no_rules')}</p>`; return; }
         c.innerHTML=rules.map(r=>`<div class="rule-row"><i class="fas ${r.type===2?'fa-users':'fa-user'}"></i>
             <b style="flex:1;">${escapeHtml(r.target_name)}</b><span class="tag-badge">${RULE_NAMES[r.rule]||r.rule}</span>
-            <button class="btn btn-danger btn-sm" onclick="deleteRule(${r.id})"><i class="fas fa-trash"></i></button></div>`).join(''); }
+            <button class="btn btn-danger btn-sm" data-i18n-title="revoke" onclick="deleteRule(${r.id})"><i class="fas fa-trash"></i></button></div>`).join('');
+        applyI18n(c); }
     async function saveRule(e){ e.preventDefault();
         try{ await apiFetch('/api/web/ab/rules',{method:'POST',body:JSON.stringify({collection_id:shareCollectionId,type:parseInt(ruleType.value),to_id:parseInt(ruleUser.value),rule:parseInt(ruleLevel.value)})});
-            showToast('Доступ предоставлен'); await loadRules(); }catch(err){showToast(err.message,true);} }
-    async function deleteRule(id){ if(!confirm('Отозвать доступ?'))return;
-        try{ await apiFetch(`/api/web/ab/rules/${id}`,{method:'DELETE'}); showToast('Отозвано'); await loadRules(); }catch(e){showToast(e.message,true);} }
+            showToast(t('rule_granted')); await loadRules(); }catch(err){showToast(err.message,true);} }
+    async function deleteRule(id){ if(!confirm(t('confirm_revoke')))return;
+        try{ await apiFetch(`/api/web/ab/rules/${id}`,{method:'DELETE'}); showToast(t('rule_revoked')); await loadRules(); }catch(e){showToast(e.message,true);} }
+
+    /* ---------- Вкладка «Коллекции» (группы пользователей) ---------- */
+    async function loadGroups(){ try{ const r=await fetch('/api/web/groups'); if(r.ok){ allGroups=await r.json(); renderGroups(); } }catch(e){} }
+    function renderGroups(){ const tb=document.getElementById('groupsTableBody');
+        if(!allGroups.length){ tb.innerHTML=`<tr><td colspan="4" class="empty-state">${t('no_collections')}</td></tr>`; return; }
+        tb.innerHTML=allGroups.map(g=>`<tr><td>${g.id}</td><td><b>${escapeHtml(g.name)}</b></td>
+            <td><span class="tag-badge">${GROUP_TYPES[g.type]||g.type}</span></td>
+            <td><div class="action-cell">
+                ${IS_ADMIN?`<button class="btn btn-warn btn-sm" data-i18n-title="edit" onclick="openGroupModal(${g.id})"><i class="fas fa-edit"></i></button>
+                ${g.id!==1?`<button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="deleteGroup(${g.id},'${escapeHtml(g.name)}')"><i class="fas fa-trash"></i></button>`:''}`:''}
+            </div></td></tr>`).join('');
+        applyI18n(tb); }
+
+    async function deleteGroup(id,name){ if(!confirm(t('confirm_delete_collection_users',{name})))return;
+        const r=await fetch(`/api/web/groups/${id}`,{method:'DELETE'}); if(r.ok){showToast(t('collection_deleted'));loadGroups();} else showToast(t('error'),true); }
+
+    const groupModal=document.getElementById('groupModal');
+    function openGroupModal(id){ currentGroupId=id||null;
+        if(id){ const g=allGroups.find(x=>x.id===id); groupModalTitle.textContent=t('edit_collection'); groupName.value=g?g.name:''; groupType.value=g?String(g.type):'1'; }
+        else { groupModalTitle.textContent=t('add_collection'); groupName.value=''; groupType.value='1'; }
+        groupModal.classList.add('active'); }
+    document.getElementById('addGroupBtn').onclick=()=>openGroupModal(null);
+    document.getElementById('addGroupBtn').style.display=IS_ADMIN?'inline-flex':'none';
+    groupModal.querySelector('.close-group-modal').onclick=()=>groupModal.classList.remove('active');
+    document.getElementById('groupForm').addEventListener('submit', async e=>{ e.preventDefault();
+        const isEdit=currentGroupId!==null; const url=isEdit?`/api/web/groups/${currentGroupId}`:'/api/web/groups';
+        const r=await fetch(url,{method:isEdit?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:groupName.value.trim(),type:parseInt(groupType.value)})});
+        if(r.ok){ showToast(isEdit?t('collection_updated'):t('collection_created')); groupModal.classList.remove('active'); loadGroups(); } else showToast(t('error'),true); });
+
+    // Вкладки: Адресная книга / Коллекции
+    function showAbSection(name){ ['ab','collections'].forEach(s=>{
+        document.getElementById('absection-'+s).style.display = (s===name)?'':'none'; });
+        if(name==='collections') loadGroups(); }
+    document.querySelectorAll('.subnav-btn').forEach(b=>b.addEventListener('click',()=>{
+        document.querySelectorAll('.subnav-btn').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active'); showAbSection(b.dataset.abtab); }));
+
+    window.onclick=e=>{ [peerModal,tagsModal,collectionsModal,shareModal,groupModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
 
     loadCollections();
 </script>

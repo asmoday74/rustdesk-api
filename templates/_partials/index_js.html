@@ -1,5 +1,6 @@
 <script>
     const API_URL = window.location.origin;
+    const IS_ADMIN = {% if is_admin %}true{% else %}false{% endif %};
     let allComputers = []; let currentPage = 1; let itemsPerPage = 20;
     let autoRefreshInterval = null; let sessionCheckInterval = null; let activityTimeout = null;
     let currentTooltipComputer = null; let isTooltipPinned = false;
@@ -7,7 +8,7 @@
     async function checkSession() {
         try {
             const r = await fetch('/api/session/check'); const d = await r.json();
-            if (!d.active) { showToast('Сессия истекла. Войдите снова.', false); setTimeout(()=>window.location.href='/login',2000); return false; }
+            if (!d.active) { showToast(t('session_expired'), false); setTimeout(()=>window.location.href='/login',2000); return false; }
             return true;
         } catch (e) { return true; }
     }
@@ -22,11 +23,11 @@
     function showTooltip(computer, event) {
         const box = document.getElementById('floatingTooltip');
         document.getElementById('tooltipBody').innerHTML = `
-            <div class="rule-row"><span>ОС:</span> <b>${escapeHtml(computer.os||'Неизвестно')}</b></div>
-            <div class="rule-row"><span>CPU:</span> <b>${escapeHtml(computer.cpu||'Неизвестно')}</b></div>
-            <div class="rule-row"><span>RAM:</span> <b>${escapeHtml(computer.memory||'Нет данных')}</b></div>
-            <div class="rule-row"><span>Версия:</span> <b>${escapeHtml(computer.version||'Неизвестно')}</b></div>
-            <div class="rule-row"><span>Создан:</span> <b>${formatDate(computer.created_at||computer.first_seen)}</b></div>`;
+            <div class="rule-row"><span>${t('info_os')}:</span> <b>${escapeHtml(computer.os||t('unknown'))}</b></div>
+            <div class="rule-row"><span>${t('info_cpu')}:</span> <b>${escapeHtml(computer.cpu||t('unknown'))}</b></div>
+            <div class="rule-row"><span>${t('info_ram')}:</span> <b>${escapeHtml(computer.memory||t('no_data'))}</b></div>
+            <div class="rule-row"><span>${t('info_version')}:</span> <b>${escapeHtml(computer.version||t('unknown'))}</b></div>
+            <div class="rule-row"><span>${t('info_created')}:</span> <b>${formatDate(computer.created_at||computer.first_seen)}</b></div>`;
         currentTooltipComputer = computer;
         const x = Math.min(event.clientX+15, window.innerWidth-350);
         const y = Math.min(event.clientY+15, window.innerHeight-260);
@@ -48,8 +49,8 @@
 
     function copyToClipboard(text, name){
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(()=>showToast(`Имя "${name}" скопировано`,false)).catch(()=>showToast('Не удалось скопировать',true));
-        } else { showToast('Копирование недоступно',true); }
+            navigator.clipboard.writeText(text).then(()=>showToast(t('name_copied',{name}),false)).catch(()=>showToast(t('copy_failed'),true));
+        } else { showToast(t('copy_unavailable'),true); }
     }
 
     function showToast(message, isError=false){
@@ -60,16 +61,16 @@
         toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),3000);
     }
 
-    function connectRustDesk(id, name){ if(!id){showToast('ID не указан',true);return;} showToast(`Подключение к ${name||id}...`,false); window.location.href=`rustdesk://connection/new/${id}`; }
+    function connectRustDesk(id, name){ if(!id){showToast(t('no_id'),true);return;} showToast(t('connecting_to',{name:name||id}),false); window.location.href=`rustdesk://connection/new/${id}`; }
 
-    function formatDate(d){ if(!d) return 'Никогда'; try{ const date=new Date(d); if(isNaN(date))return 'Никогда';
+    function formatDate(d){ if(!d) return t('never'); try{ const date=new Date(d); if(isNaN(date))return t('never');
         const diff=(new Date()-date)/1000;
-        if(diff<60) return `${Math.floor(diff)} сек назад`;
-        if(diff<3600) return `${Math.floor(diff/60)} мин назад`;
-        if(diff<86400) return `${Math.floor(diff/3600)} ч назад`;
-        if(diff<2592000) return `${Math.floor(diff/86400)} дн назад`;
-        return date.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    }catch(e){return 'Неизвестно';} }
+        if(diff<60) return t('secs_ago',{n:Math.floor(diff)});
+        if(diff<3600) return t('mins_ago',{n:Math.floor(diff/60)});
+        if(diff<86400) return t('hours_ago',{n:Math.floor(diff/3600)});
+        if(diff<2592000) return t('days_ago',{n:Math.floor(diff/86400)});
+        return date.toLocaleString(t('locale'),{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    }catch(e){return t('unknown');} }
     function isOnline(last){ if(!last) return false; return (new Date()-new Date(last))/1000 < 30; }
     function escapeHtml(s){ if(!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
@@ -90,46 +91,63 @@
 
     function updateDisplay(){
         const term=document.getElementById('searchInput').value;
-        let filtered = term ? filterComputers() : [];
-        document.getElementById('searchInfo').textContent = term ? `Найдено: ${filtered.length} из ${allComputers.length}` : 'Введите текст для поиска';
+        const filtered = term ? filterComputers() : allComputers;
+        document.getElementById('searchInfo').textContent = term
+            ? t('found_of',{found:filtered.length,total:allComputers.length})
+            : t('total_devices',{total:allComputers.length});
         const online=allComputers.filter(c=>isOnline(c.last_online)).length;
         const oc=document.getElementById('onlineCount'); if(oc){oc.textContent=online;}
         const ofc=document.getElementById('offlineCount'); if(ofc){ofc.textContent=allComputers.length-online;}
         const tc=document.getElementById('totalCount'); if(tc){tc.textContent=allComputers.length;}
         const totalPages=Math.ceil(filtered.length/itemsPerPage);
+        if(currentPage>totalPages&&totalPages>0) currentPage=totalPages;
         const start=(currentPage-1)*itemsPerPage;
         const page=filtered.slice(start,start+itemsPerPage);
         const pw=document.getElementById('paginationWrapper');
-        if(totalPages>1&&filtered.length>0){ pw.style.display='flex';
-            document.getElementById('pageInfo').textContent=`Страница ${currentPage} из ${totalPages}`;
+        if(totalPages>1){ pw.style.display='flex';
+            document.getElementById('pageInfo').textContent=t('page_of',{page:currentPage,total:totalPages});
             document.getElementById('prevBtn').disabled=currentPage===1;
             document.getElementById('nextBtn').disabled=currentPage===totalPages;
         } else pw.style.display='none';
         const tbody=document.getElementById('tableBody');
-        if(!term){ tbody.innerHTML=`<tr><td colspan="7" class="empty-state"><i class="fas fa-search"></i>Введите текст для поиска</td></tr>`; return; }
-        if(filtered.length===0){ tbody.innerHTML=`<tr><td colspan="7" class="empty-state"><i class="fas fa-search"></i>Оборудование не найдено</td></tr>`; return; }
+        if(filtered.length===0){ tbody.innerHTML=`<tr><td colspan="8" class="empty-state"><i class="fas fa-search"></i>${term?t('not_found'):t('no_devices')}</td></tr>`; return; }
         tbody.innerHTML=page.map((c,i)=>{
             const on=isOnline(c.last_online); const name=escapeHtml(c.hostname||'Unknown'); const id=escapeHtml(c.id); const uuid=escapeHtml(c.uuid||'');
+            const infoArg=`{hostname:'${name.replace(/'/g,"\\'")}',uuid:'${uuid.replace(/'/g,"\\'")}',os:'${escapeHtml(c.os||'').replace(/'/g,"\\'")}',cpu:'${escapeHtml(c.cpu||'').replace(/'/g,"\\'")}',memory:'${escapeHtml(c.memory||'').replace(/'/g,"\\'")}',version:'${escapeHtml(c.version||'').replace(/'/g,"\\'")}',created_at:'${escapeHtml(c.created_at||'').replace(/'/g,"\\'")}'}`;
             return `<tr>
                 <td>${start+i+1}</td>
                 <td><span class="computer-name">
-                    <button class="icon-btn info-trigger" onclick="toggleTooltip({hostname:'${name.replace(/'/g,"\\'")}',uuid:'${uuid.replace(/'/g,"\\'")}',os:'${escapeHtml(c.os||'').replace(/'/g,"\\'")}',cpu:'${escapeHtml(c.cpu||'').replace(/'/g,"\\'")}',memory:'${escapeHtml(c.memory||'').replace(/'/g,"\\'")}',version:'${escapeHtml(c.version||'').replace(/'/g,"\\'")}',created_at:'${escapeHtml(c.created_at||'').replace(/'/g,"\\'")}'},event)"><i class="fas fa-info-circle"></i></button>
                     <a href="#" onclick="copyToClipboard('${name.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}');return false;">${name}</a></span></td>
                 <td><span class="computer-id" onclick="connectRustDesk('${id}','${name.replace(/'/g,"\\'")}')">${id} <i class="fas fa-external-link-alt"></i></span></td>
                 <td><span class="username-badge"><i class="fas fa-user"></i>${escapeHtml(c.username||'Unknown')}</span></td>
                 <td>${escapeHtml(c.ip||'N/A')}</td>
-                <td>${on?'<span class="status-online"><i class="fas fa-circle"></i>АКТИВНО</span>':'<span class="status-offline"><i class="fas fa-circle"></i>ОФФЛАЙН</span>'}</td>
+                <td>${on?`<span class="status-online"><i class="fas fa-circle"></i>${t('status_online')}</span>`:`<span class="status-offline"><i class="fas fa-circle"></i>${t('status_offline')}</span>`}</td>
                 <td>${formatDate(c.last_online)}</td>
+                <td><div class="action-cell">
+                    <button class="icon-btn info-trigger" data-i18n-title="device_info" onclick="toggleTooltip(${infoArg},event)"><i class="fas fa-info-circle"></i></button>
+                    ${IS_ADMIN?`<button class="btn btn-danger btn-sm" data-i18n-title="delete_device" onclick="deleteDevice('${uuid}','${name.replace(/'/g,"\\'")}')"><i class="fas fa-trash"></i></button>`:''}
+                </div></td>
             </tr>`;
         }).join('');
+        applyI18n(tbody);
+    }
+
+    async function deleteDevice(uuid, name){
+        if(!uuid){ showToast(t('no_uuid'), true); return; }
+        if(!confirm(t('confirm_delete_device',{name}))) return;
+        try{
+            const r=await fetch(`${API_URL}/api/computers/${encodeURIComponent(uuid)}`,{method:'DELETE'});
+            if(r.ok){ showToast(t('device_deleted')); loadComputers(); }
+            else showToast(t('error'), true);
+        }catch(e){ showToast(t('error'), true); }
     }
 
     async function loadComputers(){
-        try{ const r=await fetch(`${API_URL}/api/computers`); if(!r.ok) throw 0; allComputers=await r.json(); currentPage=1; updateDisplay(); }
-        catch(e){ document.getElementById('tableBody').innerHTML=`<tr><td colspan="7" class="empty-state"><i class="fas fa-exclamation-triangle"></i>Ошибка подключения к серверу</td></tr>`; }
+        try{ const r=await fetch(`${API_URL}/api/computers`); if(!r.ok) throw 0; allComputers=await r.json(); updateDisplay(); }
+        catch(e){ document.getElementById('tableBody').innerHTML=`<tr><td colspan="8" class="empty-state"><i class="fas fa-exclamation-triangle"></i>${t('server_error')}</td></tr>`; }
     }
     function prevPage(){ if(currentPage>1){currentPage--;updateDisplay();} }
-    function nextPage(){ const term=document.getElementById('searchInput').value; const f=term?filterComputers():[]; if(currentPage<Math.ceil(f.length/itemsPerPage)){currentPage++;updateDisplay();} }
+    function nextPage(){ const term=document.getElementById('searchInput').value; const f=term?filterComputers():allComputers; if(currentPage<Math.ceil(f.length/itemsPerPage)){currentPage++;updateDisplay();} }
     document.getElementById('searchInput').addEventListener('input',()=>{currentPage=1;updateDisplay();});
     document.getElementById('searchType').addEventListener('change',()=>{currentPage=1;updateDisplay();});
 

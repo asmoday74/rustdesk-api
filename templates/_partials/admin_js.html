@@ -1,72 +1,41 @@
 <script>
-    let allDevices=[]; let allGroups=[]; let currentUserId=null; let currentGroupId=null;
-    let currentSort={column:'last_contact',direction:'desc'};
+    let allGroups=[]; let currentUserId=null;
     let sessionCheckInterval=null; let activityTimeout=null;
 
     async function checkSession(){ try{ const r=await fetch('/api/session/check'); const d=await r.json();
-        if(!d.active){ showToast('Сессия истекла',true); setTimeout(()=>window.location.href='/login',2000); return false;} return true; }catch(e){return true;} }
+        if(!d.active){ showToast(t('session_expired'),true); setTimeout(()=>window.location.href='/login',2000); return false;} return true; }catch(e){return true;} }
     async function extendSession(){ try{await fetch('/api/session/extend',{method:'POST'});}catch(e){} }
     function updateActivity(){ extendSession(); if(activityTimeout) clearTimeout(activityTimeout); activityTimeout=setTimeout(()=>checkSession(),120000); }
     document.addEventListener('click',updateActivity); document.addEventListener('keypress',updateActivity);
     sessionCheckInterval=setInterval(async()=>{ if(!await checkSession()) clearInterval(sessionCheckInterval); },60000);
 
-    function showToast(m,err=false){ const t=document.getElementById('toast'); const msg=document.getElementById('toastMessage'); const i=t.querySelector('i');
+    function showToast(m,err=false){ const tEl=document.getElementById('toast'); const msg=document.getElementById('toastMessage'); const i=tEl.querySelector('i');
         msg.textContent=m; i.className=err?'fas fa-exclamation-triangle':'fas fa-check-circle';
-        t.style.borderLeftColor=err?'var(--danger)':'var(--accent)'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+        tEl.style.borderLeftColor=err?'var(--danger)':'var(--accent)'; tEl.classList.add('show'); setTimeout(()=>tEl.classList.remove('show'),3000); }
     function escapeHtml(s){ if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-    function formatDate(d){ if(!d)return 'Никогда'; const dt=new Date(d); if(isNaN(dt))return 'Никогда';
-        const diff=(new Date()-dt)/1000; if(diff<60)return 'только что'; if(diff<3600)return Math.floor(diff/60)+' мин назад'; if(diff<86400)return Math.floor(diff/3600)+' ч назад';
-        return dt.toLocaleString('ru-RU'); }
-    function isOnline(l){ return l && (new Date()-new Date(l))/1000<30; }
+    function formatDate(d){ if(!d)return t('never'); const dt=new Date(d); if(isNaN(dt))return t('never');
+        const diff=(new Date()-dt)/1000; if(diff<60)return t('just_now'); if(diff<3600)return t('mins_ago',{n:Math.floor(diff/60)}); if(diff<86400)return t('hours_ago',{n:Math.floor(diff/3600)});
+        return dt.toLocaleString(t('locale')); }
 
-    const GROUP_TYPES={1:'Обычная',2:'Общая'};
-
-    async function loadGroups(){ try{ const r=await fetch('/api/web/groups'); if(r.ok){ allGroups=await r.json(); renderGroups(); fillGroupSelects(); } }catch(e){} }
-    function renderGroups(){ const tb=document.getElementById('groupsTableBody');
-        if(!allGroups.length){ tb.innerHTML='<tr><td colspan="4" class="empty-state">Нет групп</td></tr>'; return; }
-        tb.innerHTML=allGroups.map(g=>`<tr><td>${g.id}</td><td><b>${escapeHtml(g.name)}</b></td>
-            <td><span class="tag-badge">${GROUP_TYPES[g.type]||g.type}</span></td>
-            <td><div class="action-cell">
-                <button class="btn btn-warn btn-sm" onclick="openGroupModal(${g.id})"><i class="fas fa-edit"></i></button>
-                ${g.id!==1?`<button class="btn btn-danger btn-sm" onclick="deleteGroup(${g.id},'${escapeHtml(g.name)}')"><i class="fas fa-trash"></i></button>`:''}
-            </div></td></tr>`).join(''); }
+    async function loadGroups(){ try{ const r=await fetch('/api/web/groups'); if(r.ok){ allGroups=await r.json(); fillGroupSelects(); } }catch(e){} }
     function fillGroupSelects(){ const s=document.getElementById('newGroup');
         s.innerHTML=allGroups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join(''); }
 
     async function loadUsers(){ try{ const r=await fetch('/api/users'); if(!r.ok)return; const users=await r.json();
         const tb=document.getElementById('usersTableBody');
-        if(!users.length){ tb.innerHTML='<tr><td colspan="7" class="empty-state">Нет пользователей</td></tr>'; return; }
+        if(!users.length){ tb.innerHTML=`<tr><td colspan="7" class="empty-state">${t('no_users')}</td></tr>`; return; }
         tb.innerHTML=users.map(u=>{ const g=allGroups.find(x=>x.id===u.group_id);
             return `<tr><td>${u.id}</td><td><b>${escapeHtml(u.username)}</b></td>
-            <td>${u.role==='admin'?'<span class="tag-badge">Админ</span>':'Пользователь'}</td>
+            <td>${u.role==='admin'?`<span class="tag-badge">${t('role_admin_short')}</span>`:t('role_user')}</td>
             <td>${escapeHtml(g?g.name:'-')}</td><td>${escapeHtml(u.email||'-')}</td><td>${formatDate(u.created_at)}</td>
             <td><div class="action-cell">
-                <button class="btn btn-warn btn-sm" onclick="openPasswordModal(${u.id},'${escapeHtml(u.username)}')"><i class="fas fa-key"></i></button>
-                <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id},'${escapeHtml(u.username)}')"><i class="fas fa-trash"></i></button>
-            </div></td></tr>`; }).join(''); }catch(e){} }
+                <button class="btn btn-warn btn-sm" data-i18n-title="change_password" onclick="openPasswordModal(${u.id},'${escapeHtml(u.username)}')"><i class="fas fa-key"></i></button>
+                <button class="btn btn-danger btn-sm" data-i18n-title="delete_user" onclick="deleteUser(${u.id},'${escapeHtml(u.username)}')"><i class="fas fa-trash"></i></button>
+            </div></td></tr>`; }).join('');
+        applyI18n(tb); }catch(e){} }
 
-    function sortDevices(a){ const c=[...a]; c.sort((x,y)=>{ if(currentSort.column!=='last_contact')return 0;
-        const av=x.last_online?new Date(x.last_online):new Date(0); const bv=y.last_online?new Date(y.last_online):new Date(0);
-        return currentSort.direction==='asc'?av-bv:bv-av; }); return c; }
-    function filterAndDisplayDevices(){ const term=document.getElementById('searchDevices').value.toLowerCase();
-        let f=allDevices.filter(d=>(d.hostname||'').toLowerCase().includes(term)||(d.id||'').toLowerCase().includes(term)||(d.username||'').toLowerCase().includes(term));
-        const s=sortDevices(f); const tb=document.getElementById('devicesTableBody');
-        if(!s.length){ tb.innerHTML='<tr><td colspan="7" class="empty-state">Нет устройств</td></tr>'; return; }
-        tb.innerHTML=s.map(d=>{ const on=isOnline(d.last_online); return `<tr>
-            <td><b>${escapeHtml(d.hostname||'Unknown')}</b></td><td><span class="computer-id">${escapeHtml(d.id||'-')}</span></td>
-            <td>${escapeHtml(d.username||'Unknown')}</td><td>${escapeHtml(d.ip||'N/A')}</td>
-            <td>${on?'<span class="status-online"><i class="fas fa-circle"></i>Онлайн</span>':'<span class="status-offline"><i class="fas fa-circle"></i>Оффлайн</span>'}</td>
-            <td>${formatDate(d.last_online)}</td>
-            <td><button class="btn btn-danger btn-sm" onclick="deleteDevice('${d.uuid}','${escapeHtml(d.hostname)}')"><i class="fas fa-trash"></i></button></td></tr>`; }).join(''); }
-
-    async function loadDevices(){ try{ const r=await fetch('/api/computers'); if(r.ok){ allDevices=await r.json(); filterAndDisplayDevices(); } }catch(e){} }
-
-    async function deleteUser(id,name){ if(!confirm(`Удалить пользователя "${name}"?`))return;
-        const r=await fetch(`/api/users/${id}`,{method:'DELETE'}); if(r.ok){showToast(`Пользователь удален`);loadUsers();} else showToast('Ошибка',true); }
-    async function deleteDevice(uuid,name){ if(!confirm(`Удалить устройство "${name}"?`))return;
-        const r=await fetch(`/api/computers/${uuid}`,{method:'DELETE'}); if(r.ok){showToast('Устройство удалено');loadDevices();} else showToast('Ошибка',true); }
-    async function deleteGroup(id,name){ if(!confirm(`Удалить группу "${name}"? Пользователи перейдут в Default.`))return;
-        const r=await fetch(`/api/web/groups/${id}`,{method:'DELETE'}); if(r.ok){showToast('Группа удалена');loadGroups();loadUsers();} else showToast('Ошибка',true); }
+    async function deleteUser(id,name){ if(!confirm(t('confirm_delete_user',{name})))return;
+        const r=await fetch(`/api/users/${id}`,{method:'DELETE'}); if(r.ok){showToast(t('user_deleted'));loadUsers();} else showToast(t('error'),true); }
 
     // Модалки
     const userModal=document.getElementById('userModal');
@@ -75,41 +44,18 @@
     document.getElementById('addUserForm').addEventListener('submit', async e=>{ e.preventDefault();
         const data={username:newUsername.value,password:newPassword.value,role:newRole.value,email:newEmail.value,group_id:parseInt(newGroup.value||'1')};
         const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-        if(r.ok){ showToast('Пользователь создан'); userModal.classList.remove('active'); e.target.reset(); loadUsers(); } else { const d=await r.json(); showToast(d.error||'Ошибка',true); } });
+        if(r.ok){ showToast(t('user_created')); userModal.classList.remove('active'); e.target.reset(); loadUsers(); } else { const d=await r.json(); showToast(d.error||t('error'),true); } });
 
     const passwordModal=document.getElementById('passwordModal');
     function openPasswordModal(id,name){ currentUserId=id; passwordUser.value=name; newPasswordField.value=''; confirmPasswordField.value=''; passwordModal.classList.add('active'); }
     passwordModal.querySelector('.close-password-modal').onclick=()=>passwordModal.classList.remove('active');
     document.getElementById('passwordForm').addEventListener('submit', async e=>{ e.preventDefault();
-        if(newPasswordField.value.length<4){showToast('Пароль минимум 4 символа',true);return;}
-        if(newPasswordField.value!==confirmPasswordField.value){showToast('Пароли не совпадают',true);return;}
+        if(newPasswordField.value.length<4){showToast(t('password_min_len'),true);return;}
+        if(newPasswordField.value!==confirmPasswordField.value){showToast(t('passwords_mismatch'),true);return;}
         const r=await fetch(`/api/users/${currentUserId}/password`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_password:newPasswordField.value})});
-        if(r.ok){ showToast('Пароль сменен'); passwordModal.classList.remove('active'); } else showToast('Ошибка',true); });
+        if(r.ok){ showToast(t('password_changed')); passwordModal.classList.remove('active'); } else showToast(t('error'),true); });
 
-    const groupModal=document.getElementById('groupModal');
-    function openGroupModal(id){ currentGroupId=id||null;
-        if(id){ const g=allGroups.find(x=>x.id===id); groupModalTitle.textContent='Изменить группу'; groupName.value=g?g.name:''; groupType.value=g?String(g.type):'1'; }
-        else { groupModalTitle.textContent='Добавить группу'; groupName.value=''; groupType.value='1'; }
-        groupModal.classList.add('active'); }
-    document.getElementById('addGroupBtn').onclick=()=>openGroupModal(null);
-    groupModal.querySelector('.close-group-modal').onclick=()=>groupModal.classList.remove('active');
-    document.getElementById('groupForm').addEventListener('submit', async e=>{ e.preventDefault();
-        const isEdit=currentGroupId!==null; const url=isEdit?`/api/web/groups/${currentGroupId}`:'/api/web/groups';
-        const r=await fetch(url,{method:isEdit?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:groupName.value.trim(),type:parseInt(groupType.value)})});
-        if(r.ok){ showToast(isEdit?'Группа обновлена':'Группа создана'); groupModal.classList.remove('active'); loadGroups(); loadUsers(); } else showToast('Ошибка',true); });
+    window.onclick=e=>{ [userModal,passwordModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
 
-    window.onclick=e=>{ [userModal,passwordModal,groupModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
-    document.getElementById('searchDevices').addEventListener('input',filterAndDisplayDevices);
-    document.getElementById('sortHeader').addEventListener('click',()=>{ currentSort.direction=currentSort.direction==='asc'?'desc':'asc'; filterAndDisplayDevices(); });
-
-    // Подменю: Пользователи / Коллекции / Устройства
-    function showSection(name){ ['users','groups','devices'].forEach(s=>{
-        document.getElementById('section-'+s).style.display = (s===name)?'':'none'; }); }
-    document.querySelectorAll('.subnav-btn').forEach(b=>b.addEventListener('click',()=>{
-        document.querySelectorAll('.subnav-btn').forEach(x=>x.classList.remove('active'));
-        b.classList.add('active'); showSection(b.dataset.section); }));
-    showSection('users');
-
-    (async()=>{ await loadGroups(); loadUsers(); loadDevices(); })();
-    setInterval(loadDevices,15000);
+    (async()=>{ await loadGroups(); loadUsers(); })();
 </script>

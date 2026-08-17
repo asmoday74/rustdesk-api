@@ -1,15 +1,15 @@
 <script>
     function escapeHtml(s){ if(s===null||s===undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-    function showToast(m,err=false){ const t=document.getElementById('toast'); const msg=document.getElementById('toastMessage'); const i=t.querySelector('i');
+    function showToast(m,err=false){ const tEl=document.getElementById('toast'); const msg=document.getElementById('toastMessage'); const i=tEl.querySelector('i');
         msg.textContent=m; i.className=err?'fas fa-exclamation-triangle':'fas fa-check-circle';
-        t.style.borderLeftColor=err?'var(--danger)':'var(--accent)'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+        tEl.style.borderLeftColor=err?'var(--danger)':'var(--accent)'; tEl.classList.add('show'); setTimeout(()=>tEl.classList.remove('show'),3000); }
 
     const VERSIONS=[['master','nightly'],['1.4.9','1.4.9'],['1.4.8','1.4.8'],['1.4.7','1.4.7'],['1.4.6','1.4.6'],['1.4.5','1.4.5'],['1.4.4','1.4.4'],['1.4.3','1.4.3'],['1.4.2','1.4.2'],['1.4.1','1.4.1'],['1.4.0','1.4.0']];
     const OS_ICON={windows:'fab fa-windows', linux:'fab fa-linux', macos:'fab fa-apple', android:'fab fa-android'};
     let configs=[], editCfgId=null, curOs='windows';
     let images={icon:'', logo:''};
 
-    function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString('ru-RU'); }
+    function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString(t('locale')); }
     function val(id){ return document.getElementById(id).value; }
     function chk(id){ return document.getElementById(id).checked; }
     function setErr(id,msg){ const el=document.getElementById(id); el.textContent=msg||''; el.classList.toggle('show',!!msg); }
@@ -21,19 +21,21 @@
     }
 
     function buildCell(c){
-        if(c.build_status==='running') return '<span class="status-online"><i class="fas fa-circle"></i>сборка...</span>';
+        const runLink = /^https?:\/\//.test(c.build_log||'')
+            ? ` <a class="icon-btn" href="${escapeHtml(c.build_log)}" target="_blank" rel="noopener" title="GitHub Actions"><i class="fas fa-external-link-alt"></i></a>` : '';
+        if(c.build_status==='running') return `<span class="status-online"><i class="fas fa-circle"></i>${t('cg_building')}</span>` + runLink;
         let html='';
         if(c.build_status==='success')
-            html += `<a class="btn btn-ghost btn-sm" href="/api/web/clientgen/configs/${c.id}/download"><i class="fas fa-download"></i> Скачать</a> `;
+            html += `<a class="btn btn-ghost btn-sm" href="/api/web/clientgen/configs/${c.id}/download"><i class="fas fa-download"></i> ${t('cg_download')}</a> `;
         if(c.build_status!=='running')
-            html += `<button class="btn btn-primary btn-sm" onclick="startBuild(${c.id})"><i class="fas fa-hammer"></i> Собрать</button>`;
-        if(c.build_status==='failed') html += ' <span class="status-offline"><i class="fas fa-circle"></i>ошибка</span>';
+            html += `<button class="btn btn-primary btn-sm" onclick="startBuild(${c.id})"><i class="fas fa-hammer"></i> ${t('cg_build')}</button>`;
+        if(c.build_status==='failed') html += ` <span class="status-offline"><i class="fas fa-circle"></i>${t('cg_error')}</span>` + runLink;
         return html || '—';
     }
 
     function renderConfigs(){
         const tb=document.getElementById('cfgBody');
-        if(!configs.length){ tb.innerHTML='<tr><td colspan="7" class="empty-state">Конфигураций нет</td></tr>'; return; }
+        if(!configs.length){ tb.innerHTML=`<tr><td colspan="7" class="empty-state">${t('cg_no_configs')}</td></tr>`; return; }
         tb.innerHTML=configs.map(c=>`<tr>
             <td><b>${escapeHtml(c.name)}</b></td>
             <td><i class="${OS_ICON[c.platform]||'fas fa-desktop'}"></i> ${escapeHtml((c.platform||'').replace('windows-x86','windows (x86)'))}</td>
@@ -42,29 +44,30 @@
             <td>${fmtDate(c.build_date)}</td>
             <td>${escapeHtml(c.author||'')}</td>
             <td><div class="action-cell">
-                <button class="btn btn-ghost btn-sm" onclick="openEditor(${c.id})"><i class="fas fa-edit"></i></button>
-                <button class="btn btn-ghost btn-sm" onclick="dupCfg(${c.id})"><i class="fas fa-copy"></i></button>
-                <button class="btn btn-danger btn-sm" onclick="delCfg(${c.id})"><i class="fas fa-trash"></i></button>
+                <button class="btn btn-ghost btn-sm" data-i18n-title="edit" onclick="openEditor(${c.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-ghost btn-sm" data-i18n-title="duplicate" onclick="dupCfg(${c.id})"><i class="fas fa-copy"></i></button>
+                <button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="delCfg(${c.id})"><i class="fas fa-trash"></i></button>
             </div></td></tr>`).join('');
+        applyI18n(tb);
     }
 
     async function startBuild(id){
         try{ const r=await fetch(`/api/web/clientgen/configs/${id}/build`,{method:'POST'});
             const d=await r.json().catch(()=>({}));
-            if(!r.ok){ showToast(d.error || ('Ошибка сборки (HTTP '+r.status+')'),true); return; }
+            if(!r.ok){ showToast(d.error || (t('cg_build_error')+' (HTTP '+r.status+')'),true); return; }
             loadConfigs(); pollStatus(id);
-        }catch(e){ showToast('Ошибка: '+e,true); }
+        }catch(e){ showToast(t('error')+': '+e,true); }
     }
     function pollStatus(id){
-        const t=setInterval(async()=>{
+        const tId=setInterval(async()=>{
             try{ const r=await fetch(`/api/web/clientgen/configs/${id}/status`); const d=await r.json();
-                if(d.build_status!=='running'){ clearInterval(t); loadConfigs(); }
-            }catch(e){ clearInterval(t); }
+                if(d.build_status!=='running'){ clearInterval(tId); loadConfigs(); }
+            }catch(e){ clearInterval(tId); }
         }, 5000);
     }
 
     async function dupCfg(id){ try{ await fetch(`/api/web/clientgen/configs/${id}/duplicate`,{method:'POST'}); loadConfigs(); }catch(e){} }
-    async function delCfg(id){ if(!confirm('Удалить конфигурацию?')) return;
+    async function delCfg(id){ if(!confirm(t('cg_confirm_delete'))) return;
         try{ await fetch(`/api/web/clientgen/configs/${id}`,{method:'DELETE'}); loadConfigs(); }catch(e){} }
 
     /* ---------- редактор ---------- */
@@ -90,7 +93,7 @@
 
     function copyKey(){
         const v=val('cgKey'); if(!v) return;
-        navigator.clipboard.writeText(v).then(()=>showToast('Key скопирован'));
+        navigator.clipboard.writeText(v).then(()=>showToast(t('cg_key_copied')));
     }
 
     function pickImage(input,kind){
@@ -98,15 +101,15 @@
         if(!file) return;
         const errId = kind==='icon'?'errIcon':'errLogo';
         setErr(errId,'');
-        if(file.type!=='image/png'){ setErr(errId,'Only PNG images are allowed.'); return; }
+        if(file.type!=='image/png'){ setErr(errId,t('cg_png_only')); return; }
         const reader=new FileReader();
         reader.onload=e=>{
             const dataUrl=e.target.result;
             if(kind==='logo'){ setImage('logo',dataUrl,file.name); return; }
             const img=new Image();
-            img.onload=()=>{ if(img.naturalWidth!==img.naturalHeight){ setErr('errIcon','Icon dimensions must be square.'); return; }
+            img.onload=()=>{ if(img.naturalWidth!==img.naturalHeight){ setErr(errId,t('cg_icon_square')); return; }
                 setImage('icon',dataUrl,file.name); };
-            img.onerror=()=>setErr('errIcon','Invalid icon file.');
+            img.onerror=()=>setErr(errId,t('cg_icon_invalid'));
             img.src=dataUrl;
         };
         reader.readAsDataURL(file);
@@ -122,7 +125,7 @@
 
     function openEditor(id){
         editCfgId=id||null;
-        document.getElementById('cgSaveBtn').textContent = id?'Save':'Create';
+        document.getElementById('cgSaveBtn').textContent = id?t('save'):t('create');
         const vs=document.getElementById('cgVersion');
         vs.innerHTML=VERSIONS.map(v=>`<option value="${v[0]}">${v[1]}</option>`).join('');
         ['cgName','cgAppName','cgHost','cgKey','cgApi','cgNote','cgPassValue','cgOverrideManual','cgDefaultManual']
@@ -192,11 +195,11 @@
 
     function validateForm(name,cfg){
         let ok=true;
-        if(!name){ setErr('errName','This field is required.'); ok=false; }
-        else if(!/^[A-Za-z0-9_-]+$/.test(name)){ setErr('errName','English letters, digits, "-" and "_" only (no spaces).'); ok=false; }
-        if(!cfg.appname){ setErr('errAppName','This field is required.'); ok=false; }
-        else if(!cfg.appname.split('').every(c=>c.charCodeAt(0)<128)){ setErr('errAppName','English characters only.'); ok=false; }
-        if(chk('cgPresetPass') && !cfg.permanentPassword){ setErr('errPass','This field is required.'); ok=false; }
+        if(!name){ setErr('errName',t('cg_required')); ok=false; }
+        else if(!/^[A-Za-z0-9_-]+$/.test(name)){ setErr('errName',t('cg_name_format')); ok=false; }
+        if(!cfg.appname){ setErr('errAppName',t('cg_required')); ok=false; }
+        else if(!cfg.appname.split('').every(c=>c.charCodeAt(0)<128)){ setErr('errAppName',t('cg_english_only')); ok=false; }
+        if(chk('cgPresetPass') && !cfg.permanentPassword){ setErr('errPass',t('cg_required')); ok=false; }
         return ok;
     }
 
@@ -212,11 +215,11 @@
             if(!r.ok){
                 const d=await r.json().catch(()=>({}));
                 const details=d.details?Object.values(d.details).join(' '):'';
-                showToast(d.error||('Ошибка сохранения (HTTP '+r.status+')')+(details?' '+details:''),true);
+                showToast(d.error||(t('cg_save_error')+' (HTTP '+r.status+')')+(details?' '+details:''),true);
                 return;
             }
-            closeEditor(); loadConfigs(); showToast('Конфигурация сохранена');
-        }catch(e){ showToast('Ошибка: '+e,true); }
+            closeEditor(); loadConfigs(); showToast(t('cg_saved'));
+        }catch(e){ showToast(t('error')+': '+e,true); }
     }
 
     document.querySelectorAll('.cg-os-btn').forEach(b=>b.addEventListener('click',()=>setOs(b.dataset.os)));

@@ -10,13 +10,15 @@ from modules import (
     init_db, init_db_pool, close_all_connections,
     get_user_by_username, create_user, add_audit_log,
     init_auth_routes, init_computers_routes, init_public_routes,
-    init_ab_routes, init_clientgen_routes
+    init_ab_routes, init_clientgen_routes, init_rdgen_routes
 )
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 # ========== НАСТРОЙКИ ==========
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+# артефакты сборки клиентов (save_custom_client) могут быть крупными
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024
 
 # Шаблон оформления задаётся в docker-compose переменной TEMPLATE.
 # Если не задан или папка templates/<имя> отсутствует — используем rustdesk.
@@ -166,6 +168,7 @@ init_computers_routes(app)
 init_public_routes(app)
 init_ab_routes(app)
 init_clientgen_routes(app)
+init_rdgen_routes(app)
 
 # ========== ЗАПУСК ==========
 if __name__ == '__main__':

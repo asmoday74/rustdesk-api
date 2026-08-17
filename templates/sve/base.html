@@ -18,19 +18,20 @@
                 <div class="logo-icon"><i class="fas fa-tree"></i></div>
                 <div>
                     <h1>НПАО «Светогорский ЦБК»</h1>
-                    <p>Система мониторинга оборудования и удалённого доступа</p>
+                    <p data-i18n="sve_subtitle">Система мониторинга оборудования и удалённого доступа</p>
                 </div>
             </div>
             {% block sve_stats %}{% endblock %}
         </header>
         <nav class="sve-nav">
             <div class="nav-links">
-                <a href="/"><i class="fas fa-chart-line"></i> Мониторинг</a>
-                <a href="/ab"><i class="fas fa-book"></i> Адресная книга</a>
-                {% if is_admin %}<a href="/admin"><i class="fas fa-cog"></i> Управление</a>{% endif %}
-                {% if is_admin %}<a href="/audit"><i class="fas fa-shield-alt"></i> Аудит безопасности</a>{% endif %}
-                {% if is_admin %}<a href="/clientgen"><i class="fas fa-hammer"></i> Создание клиента</a>{% endif %}
-                <a href="/logout"><i class="fas fa-sign-out-alt"></i> Выход</a>
+                <a href="/"><i class="fas fa-chart-line"></i> <span data-i18n="nav_monitoring">Мониторинг</span></a>
+                <a href="/ab"><i class="fas fa-book"></i> <span data-i18n="nav_device_lists">Списки устройств</span></a>
+                {% if is_admin %}<a href="/admin"><i class="fas fa-cog"></i> <span data-i18n="nav_users">Пользователи</span></a>{% endif %}
+                {% if is_admin %}<a href="/audit"><i class="fas fa-shield-alt"></i> <span data-i18n="nav_audit">Аудит безопасности</span></a>{% endif %}
+                {% if is_admin %}<a href="/clientgen"><i class="fas fa-hammer"></i> <span data-i18n="nav_clientgen">Создание клиента</span></a>{% endif %}
+                <a href="/logout"><i class="fas fa-sign-out-alt"></i> <span data-i18n="logout">Выход</span></a>
+                <span data-lang-switch></span>
             </div>
         </nav>
         <main class="content">
@@ -38,6 +39,7 @@
         </main>
     </div>
 </div>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/ui.js"></script>
 {% block scripts %}{% endblock %}
 </body>

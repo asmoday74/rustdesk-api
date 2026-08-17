@@ -498,7 +498,40 @@ check('clientgen update', r.status_code == 200)
 r = anon.get(f'/api/web/clientgen/configs/{cid}/status')
 check('clientgen status none', r.status_code == 200 and r.get_json()['build_status'] == 'none')
 r = anon.post(f'/api/web/clientgen/configs/{cid}/build')
-check('clientgen build blocked w/o RDGEN_CLI', r.status_code == 400)
+check('clientgen build blocked w/o GitHub settings', r.status_code == 400)
+
+# ---- callback-эндпоинты генератора (GitHub Actions) ----
+import io  # noqa: E402
+import tempfile  # noqa: E402
+clientgen_mod.DATA_DIR = tempfile.mkdtemp(prefix='clientgen-test-')
+fake_execute_query(
+    "UPDATE client_configs SET uuid='u-cb-1', build_token='tok-123', build_status='running' WHERE id=%s", (cid,))
+r = anon.post('/updategh', json={'uuid': 'u-cb-1', 'status': 'success'})
+check('updategh w/o token rejected', r.status_code == 401)
+r = anon.post('/updategh', json={'uuid': 'u-cb-1', 'status': 'success'},
+              headers={'Authorization': 'Bearer tok-123'})
+check('updategh success', r.status_code == 200)
+r = anon.get(f'/api/web/clientgen/configs/{cid}/status')
+check('updategh applied', r.get_json()['build_status'] == 'success')
+fake_execute_query("UPDATE client_configs SET build_status='running' WHERE id=%s", (cid,))
+r = anon.post('/save_custom_client',
+              data={'uuid': 'u-cb-1', 'file': (io.BytesIO(b'EXE'), 'test-cfg.exe')},
+              content_type='multipart/form-data',
+              headers={'Authorization': 'Bearer tok-123'})
+check('save_custom_client', r.status_code == 200)
+r = anon.post('/save_custom_client',
+              data={'uuid': 'u-cb-1', 'file': (io.BytesIO(b'EXE'), 'x.exe')},
+              content_type='multipart/form-data')
+check('save_custom_client w/o token rejected', r.status_code == 401)
+r = anon.get('/get_zip?filename=../../etc/passwd')
+check('get_zip traversal rejected', r.status_code == 404)
+r = anon.post('/cleanzip', json={})
+check('cleanzip w/o uuid', r.status_code == 400)
+r = anon.post('/cleanzip', json={'uuid': 'u-cb-1'})
+check('cleanzip ok', r.status_code == 200)
+r = anon.get('/get_png?uuid=u-cb-1&filename=icon.png')
+check('get_png absent 404', r.status_code == 404)
+
 r = anon.delete(f'/api/web/clientgen/configs/{cid}')
 check('clientgen delete', r.status_code == 200)
 # non-admin denied

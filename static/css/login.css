@@ -14,5 +14,6 @@
     padding: 11px; border-radius: var(--radius-sm); margin-bottom: 16px;
     display: none; font-size: .84rem;
 }
-.btn-login { width: 100%; padding: 12px; font-size: .95rem; }
+.btn-login { width: 100%; padding: 12px; font-size: .95rem; justify-content: center; text-align: center; }
 .login-theme { position: absolute; top: 16px; right: 16px; }
+.login-lang { position: absolute; top: 16px; right: 60px; }

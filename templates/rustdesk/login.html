@@ -18,23 +18,25 @@
 </head>
 <body>
 <div class="login-wrapper">
-    <button class="icon-btn login-theme" data-action="toggle-theme" title="Сменить схему"><i class="fas fa-moon"></i></button>
+    <span class="login-lang" data-lang-switch></span>
+    <button class="icon-btn login-theme" data-action="toggle-theme" data-i18n-title="theme_toggle"><i class="fas fa-moon"></i></button>
     <div class="panel login-card">
         <div class="panel-body">
             <div class="login-header">
                 <img src="/theme/img/logo.svg" alt="RustDesk">
-                <h1>RustDesk Консоль</h1>
-                <p>Вход в систему</p>
+                <h1 data-i18n="console_title">RustDesk Консоль</h1>
+                <p data-i18n="login_subtitle">Вход в систему</p>
             </div>
-            <div class="error-message" id="errorMsg">Неверный логин или пароль</div>
+            <div class="error-message" id="errorMsg" data-i18n="invalid_credentials">Неверный логин или пароль</div>
             <form id="loginForm">
-                <div class="form-group"><label>Логин</label><input type="text" id="username" required autofocus></div>
-                <div class="form-group"><label>Пароль</label><input type="password" id="password" required></div>
-                <button type="submit" class="btn btn-primary btn-login">Войти</button>
+                <div class="form-group"><label data-i18n="login_label">Логин</label><input type="text" id="username" required autofocus></div>
+                <div class="form-group"><label data-i18n="password_label">Пароль</label><input type="password" id="password" required></div>
+                <button type="submit" class="btn btn-primary btn-login" data-i18n="sign_in">Войти</button>
             </form>
         </div>
     </div>
 </div>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/ui.js"></script>
 <script>
     document.getElementById('loginForm').addEventListener('submit', async (e) => {

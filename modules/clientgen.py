@@ -2,18 +2,25 @@ import base64
 import json
 import os
 import re
+import secrets as pysecrets
 import shutil
 import struct
-import subprocess
-import sys
-import threading
+import uuid as uuidlib
 import zipfile
 
 from modules.database import execute_query
 
 DATA_DIR = os.environ.get('CLIENTGEN_DIR', '/data/clientgen')
-RDGEN_CLI = os.environ.get('RDGEN_CLI', '')          # путь к rdgen_cli.py или исполняемому файлу
-RDGEN_SERVER = os.environ.get('RDGEN_SERVER', '')    # адрес RDGen сервера
+
+# Настройки встроенного генератора (GitHub Actions, порт rdgen)
+GH_USER = os.environ.get('GH_USER', '')            # владелец репозитория с воркфлоу
+GH_REPO = os.environ.get('GH_REPO', 'rustdesk-api')  # репозиторий с воркфлоу generator-*.yml
+GH_BRANCH = os.environ.get('GH_BRANCH', 'main')    # ветка для workflow_dispatch
+GH_TOKEN = os.environ.get('GH_TOKEN', '')          # PAT с правом actions:write
+GENURL = os.environ.get('GENURL', '')              # публичный URL этого сервера (для раннеров GitHub)
+ZIP_PASSWORD = os.environ.get('ZIP_PASSWORD', '')  # пароль AES-архива с секретами сборки
+PROTOCOL = os.environ.get('PROTOCOL', 'https')
+SH_SECRET = os.environ.get('SH_SECRET', '')        # секрет self-hosted раннера (sh-generator)
 
 # правила валидации совпадают с формой rdgen (PLATFORM/VERSION/... choices)
 PLATFORM_CHOICES = ('windows', 'windows-x86', 'linux', 'android', 'macos')
@@ -22,6 +29,14 @@ VERSION_CHOICES = ('master', '1.4.9', '1.4.8', '1.4.7', '1.4.6', '1.4.5',
 DIRECTION_CHOICES = ('incoming', 'outgoing', 'both')
 INSTALLATION_CHOICES = ('installationY', 'installationN')
 SETTINGS_CHOICES = ('settingsY', 'settingsN')
+
+WORKFLOW_BY_PLATFORM = {
+    'windows': 'generator-windows.yml',
+    'windows-x86': 'generator-windows-x86.yml',
+    'linux': 'generator-linux.yml',
+    'android': 'generator-android.yml',
+    'macos': 'generator-macos.yml',
+}
 
 DEFAULT_CONFIG = {
     "platform": "windows", "version": "1.4.9",
@@ -32,13 +47,10 @@ DEFAULT_CONFIG = {
     "permanentPassword": "", "defaultManual": "", "overrideManual": "", "note": "",
 }
 
-# обязательные ChoiceFields веб-формы rdgen (POST /generator), которых нет в
-# нашей схеме; rdgen-cli шлёт конфиг как form-data, без них форма invalid
-RDGEN_FORM_DEFAULTS = {
-    "theme": "system", "themeDorO": "default",
-    "passApproveMode": "password-click",
-    "permissionsDorO": "default", "permissionsType": "custom",
-}
+
+def generator_configured():
+    """Достаточно ли настроек для запуска сборки через GitHub Actions."""
+    return bool(GH_USER and GH_TOKEN and GENURL and ZIP_PASSWORD)
 
 
 def _png_dims(data_url):
@@ -105,6 +117,11 @@ def get_config(cid):
         "SELECT * FROM client_configs WHERE id=%s", (cid,), fetch_one=True))
 
 
+def get_config_by_uuid(uuid_val):
+    return _row(execute_query(
+        "SELECT * FROM client_configs WHERE uuid=%s", (uuid_val,), fetch_one=True))
+
+
 def create_config(name, platform, version, author, config_json):
     return execute_query("""
         INSERT INTO client_configs (name, platform, version, author, config_json)
@@ -119,7 +136,8 @@ def update_config(cid, name, platform, version, config_json):
         shutil.rmtree(cfg['artifact_dir'], ignore_errors=True)
     execute_query("""
         UPDATE client_configs SET name=%s, platform=%s, version=%s, config_json=%s,
-            build_status='none', build_log='', build_date=NULL, artifact_dir='', updated_at=NOW()
+            build_status='none', build_log='', build_date=NULL, artifact_dir='',
+            uuid='', github_run_id='', build_token='', updated_at=NOW()
         WHERE id=%s
     """, (name, platform, version, config_json, cid))
 
@@ -145,44 +163,295 @@ def _artifact_dir(cid):
     return d
 
 
+def _png_dir(uuid_val):
+    d = os.path.join(DATA_DIR, 'png', uuid_val)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _zip_dir():
+    d = os.path.join(DATA_DIR, 'temp_zips')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _save_data_url_png(data_url, path):
+    """Сохраняет PNG из data-URL (base64). Возвращает True при успехе."""
+    if not isinstance(data_url, str) or ';base64,' not in data_url:
+        return False
+    try:
+        _, encoded = data_url.split(';base64,', 1)
+        with open(path, 'wb') as f:
+            f.write(base64.b64decode(encoded))
+        return True
+    except Exception:
+        return False
+
+
+def _parse_manual(text):
+    """Строки key=value -> dict (как default/override manual в rdgen)."""
+    out = {}
+    for line in (text or '').splitlines():
+        if '=' in line:
+            k, v = line.split('=', 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def build_custom_json(cfg):
+    """custom.txt (JSON) кастомного клиента — портировано из rdgen."""
+    decoded = {}
+    direction = cfg.get('direction', 'both')
+    if direction != 'both':
+        decoded['conn-type'] = direction
+    if cfg.get('installation') == 'installationN':
+        decoded['disable-installation'] = 'Y'
+    if cfg.get('settings') == 'settingsN':
+        decoded['disable-settings'] = 'Y'
+    appname = (cfg.get('appname') or '').strip()
+    if appname and appname.lower() != 'rustdesk':
+        decoded['app-name'] = appname
+    if cfg.get('permanentPassword'):
+        decoded['password'] = cfg['permanentPassword']
+    decoded['default-settings'] = _parse_manual(cfg.get('defaultManual'))
+    decoded['override-settings'] = _parse_manual(cfg.get('overrideManual'))
+    return json.dumps(decoded)
+
+
+def _github_api(path):
+    return 'https://api.github.com/repos/%s/%s/%s' % (GH_USER, GH_REPO, path)
+
+
+def _github_headers():
+    return {
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GH_TOKEN,
+        'X-GitHub-Api-Version': '2026-03-10',
+    }
+
+
 def start_build(cid):
+    """Запускает сборку кастомного клиента через GitHub Actions (без rdgen-cli)."""
     cfg = get_config(cid)
     if not cfg:
         return False, 'not found'
     if cfg['build_status'] == 'running':
         return False, 'already running'
-    if not RDGEN_CLI or not RDGEN_SERVER:
-        return False, 'rdgen-cli не настроен (RDGEN_CLI / RDGEN_SERVER)'
-    execute_query("UPDATE client_configs SET build_status='running', build_log='', updated_at=NOW() WHERE id=%s", (cid,))
-    t = threading.Thread(target=_run_build, args=(cid,), daemon=True)
-    t.start()
+    if not generator_configured():
+        return False, 'Генератор не настроен (GH_USER/GH_TOKEN/GENURL/ZIP_PASSWORD)'
+
+    try:
+        data = json.loads(cfg['config_json'] or '{}')
+    except ValueError:
+        return False, 'invalid config_json'
+
+    import requests
+    try:
+        import pyzipper
+    except ImportError:
+        return False, 'pyzipper не установлен'
+
+    platform = cfg.get('platform') or 'windows'
+    version = cfg.get('version') or '1.4.9'
+    filename = cfg['name']
+    myuuid = str(uuidlib.uuid4())
+    build_token = pysecrets.token_hex(16)
+
+    # иконка/логотип: сохраняем PNG, раннер скачает их по GET /get_png
+    iconlink_url = iconlink_uuid = iconlink_file = 'false'
+    if data.get('iconbase64'):
+        p = os.path.join(_png_dir(myuuid), 'icon.png')
+        if _save_data_url_png(data['iconbase64'], p):
+            iconlink_url, iconlink_uuid, iconlink_file = GENURL, myuuid, 'icon.png'
+    logolink_url = logolink_uuid = logolink_file = 'false'
+    if data.get('logobase64'):
+        p = os.path.join(_png_dir(myuuid), 'logo.png')
+        if _save_data_url_png(data['logobase64'], p):
+            logolink_url, logolink_uuid, logolink_file = GENURL, myuuid, 'logo.png'
+
+    custom_b64 = base64.b64encode(build_custom_json(data).encode('ascii')).decode('ascii')
+    server = data.get('serverIP') or 'rs-ny.rustdesk.com'
+    key = data.get('key') or 'OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw='
+    api_server = data.get('apiServer') or (server + ':21114')
+
+    inputs_raw = {
+        'server': server,
+        'key': key,
+        'apiServer': api_server,
+        'custom': custom_b64,
+        'uuid': myuuid,
+        'token': build_token,
+        'iconlink_url': iconlink_url,
+        'iconlink_uuid': iconlink_uuid,
+        'iconlink_file': iconlink_file,
+        'logolink_url': logolink_url,
+        'logolink_uuid': logolink_uuid,
+        'logolink_file': logolink_file,
+        'privacylink_url': 'false',
+        'privacylink_uuid': 'false',
+        'privacylink_file': 'false',
+        'appname': (data.get('appname') or 'rustdesk').strip(),
+        'genurl': GENURL,
+        'urlLink': 'https://rustdesk.com',
+        'downloadLink': 'https://rustdesk.com/download',
+        'delayFix': 'true',
+        'rdgen': 'true',
+        'xOffline': 'false',
+        'removeNewVersionNotif': 'false',
+        'compname': 'Purslane Ltd',
+        'androidappid': 'com.carriez.flutter_hbb',
+        'filename': filename,
+    }
+
+    # шифруем входы сборки в AES-zip; раннер скачает его по GET /get_zip.
+    # uuid сборки в имени нужен для удаления файла по POST /cleanzip
+    zip_filename = 'secrets_%s_%s.zip' % (myuuid, uuidlib.uuid4())
+    zip_path = os.path.join(_zip_dir(), zip_filename)
+    tmp_json = zip_path + '.json'
+    try:
+        with open(tmp_json, 'w', encoding='utf-8') as f:
+            json.dump(inputs_raw, f)
+        with pyzipper.AESZipFile(zip_path, 'w', compression=pyzipper.ZIP_LZMA,
+                                 encryption=pyzipper.WZ_AES) as zf:
+            zf.setpassword(ZIP_PASSWORD.encode())
+            zf.write(tmp_json, arcname='secrets.json')
+    finally:
+        if os.path.exists(tmp_json):
+            os.remove(tmp_json)
+
+    workflow = WORKFLOW_BY_PLATFORM.get(platform, 'generator-windows.yml')
+    if platform == 'windows' and SH_SECRET and data.get('sh_secret_field') == SH_SECRET:
+        workflow = 'sh-generator-windows.yml'
+
+    dispatch_url = _github_api('actions/workflows/%s/dispatches' % workflow)
+    payload = {
+        'ref': GH_BRANCH,
+        'inputs': {
+            'version': version,
+            'zip_url': json.dumps({'url': GENURL, 'file': zip_filename}),
+        },
+        'return_run_details': True,
+    }
+    try:
+        r = requests.post(dispatch_url, json=payload, headers=_github_headers(), timeout=30)
+    except Exception as e:
+        return False, 'GitHub API: %s' % e
+    if r.status_code not in (200, 204):
+        return False, 'GitHub отклонил запуск сборки (HTTP %s)' % r.status_code
+
+    run_id = ''
+    log_url = ''
+    try:
+        body = r.json()
+        run_id = str(body.get('workflow_run_id') or '')
+        log_url = body.get('html_url') or ''
+    except Exception:
+        pass
+
+    execute_query("""
+        UPDATE client_configs SET build_status='running', build_log=%s, build_date=NULL,
+            artifact_dir='', uuid=%s, github_run_id=%s, build_token=%s, updated_at=NOW()
+        WHERE id=%s
+    """, (log_url, myuuid, run_id, build_token, cid))
     return True, 'started'
 
 
-def _run_build(cid):
-    cfg = get_config(cid)
-    art = _artifact_dir(cid)
-    cfg_path = os.path.join(art, 'config.json')
+def _github_run_status(run_id):
+    """Состояние запуска GitHub Actions: (status, conclusion, html_url)."""
+    import requests
     try:
-        # rdgen требует exename; для старых записей без него — имя конфигурации
-        data = {**RDGEN_FORM_DEFAULTS, **json.loads(cfg['config_json'])}
-        data['exename'] = data.get('exename') or cfg['name']
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False)
-        exe = [sys.executable] if RDGEN_CLI.endswith('.py') else []
-        cmd = exe + [RDGEN_CLI, '-f', cfg_path, '-s', RDGEN_SERVER, '-d']
-        proc = subprocess.run(cmd, cwd=art, capture_output=True, text=True, timeout=3600)
-        log = (proc.stdout or '') + (proc.stderr or '')
-        if proc.returncode == 0:
-            execute_query("""UPDATE client_configs SET build_status='success', build_log=%s,
-                             build_date=NOW(), artifact_dir=%s, updated_at=NOW() WHERE id=%s""",
-                          (log, art, cid))
+        r = requests.get(_github_api('actions/runs/%s' % run_id),
+                         headers=_github_headers(), timeout=30)
+        if r.status_code != 200:
+            return None, None, ''
+        d = r.json()
+        return d.get('status'), d.get('conclusion'), d.get('html_url') or ''
+    except Exception:
+        return None, None, ''
+
+
+def refresh_build_status(cid):
+    """Ленивый поллинг GitHub (как _get_run_status в rdgen). Вызывается из /status."""
+    cfg = get_config(cid)
+    if not cfg or cfg['build_status'] != 'running' or not cfg.get('github_run_id'):
+        return cfg
+    status, conclusion, html_url = _github_run_status(cfg['github_run_id'])
+    if status == 'completed' and conclusion:
+        if conclusion == 'success':
+            execute_query("""
+                UPDATE client_configs SET build_status='success', build_date=NOW(),
+                    artifact_dir=%s, updated_at=NOW() WHERE id=%s
+            """, (_artifact_dir(cid), cid))
         else:
-            execute_query("""UPDATE client_configs SET build_status='failed', build_log=%s, updated_at=NOW() WHERE id=%s""",
-                          (log, cid))
-    except Exception as e:
-        execute_query("""UPDATE client_configs SET build_status='failed', build_log=%s, updated_at=NOW() WHERE id=%s""",
-                      (str(e), cid))
+            execute_query("""
+                UPDATE client_configs SET build_status='failed',
+                    build_log=COALESCE(NULLIF(build_log,''), '') || %s, updated_at=NOW()
+                WHERE id=%s
+            """, ('\nGitHub run: ' + html_url if html_url else '', cid))
+        return get_config(cid)
+    return cfg
+
+
+def apply_callback_status(uuid_val, status):
+    """Обработка статуса сборки из воркфлоу (POST /updategh)."""
+    cfg = get_config_by_uuid(uuid_val)
+    if not cfg:
+        return False
+    status = (status or '').strip()
+    if status in ('success',):
+        execute_query("""
+            UPDATE client_configs SET build_status='success', build_date=NOW(),
+                artifact_dir=%s, updated_at=NOW() WHERE id=%s
+        """, (_artifact_dir(cfg['id']), cfg['id']))
+    elif status in ('failure', 'cancelled', 'timed_out', 'skipped'):
+        execute_query(
+            "UPDATE client_configs SET build_status='failed', updated_at=NOW() WHERE id=%s",
+            (cfg['id'],))
+    else:
+        execute_query(
+            "UPDATE client_configs SET build_status='running', updated_at=NOW() WHERE id=%s",
+            (cfg['id'],))
+    return True
+
+
+def save_artifact(uuid_val, filename, stream):
+    """Сохраняет артефакт сборки из воркфлоу (POST /save_custom_client)."""
+    cfg = get_config_by_uuid(uuid_val)
+    if not cfg:
+        return None
+    safe = os.path.basename(filename or '')
+    if not safe:
+        return None
+    art = _artifact_dir(cfg['id'])
+    path = os.path.join(art, safe)
+    stream.save(path)
+    return path
+
+
+def temp_zip_path(filename):
+    """Путь к zip с секретами сборки (с защитой от выхода за каталог)."""
+    base = os.path.abspath(_zip_dir())
+    path = os.path.abspath(os.path.join(base, filename or ''))
+    if not path.startswith(base + os.sep) or not os.path.isfile(path):
+        return None
+    return path
+
+
+def cleanup_temp_zips(uuid_val):
+    """Удаляет zip с секретами по uuid сборки (POST /cleanzip)."""
+    if not uuid_val or not re.fullmatch(r'[0-9a-f-]{36}', uuid_val):
+        return 0
+    removed = 0
+    d = _zip_dir()
+    for f in os.listdir(d):
+        if f.endswith('.zip') and uuid_val in f:
+            try:
+                os.remove(os.path.join(d, f))
+                removed += 1
+            except OSError:
+                pass
+    return removed
 
 
 def artifact_zip(cid):
@@ -190,7 +459,7 @@ def artifact_zip(cid):
     cfg = get_config(cid)
     if not cfg or cfg['build_status'] != 'success':
         return None
-    art = cfg['artifact_dir']
+    art = cfg['artifact_dir'] or _artifact_dir(cid)
     if not art or not os.path.isdir(art):
         return None
     files = [f for f in os.listdir(art) if os.path.isfile(os.path.join(art, f)) and f != 'config.json']

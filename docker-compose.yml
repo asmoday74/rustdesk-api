@@ -39,6 +39,21 @@ services:
       - SECRET_KEY=your-secret-key-change-this-in-production
       # Шаблон оформления: rustdesk (тёмная/светлая схема) или sve (прежний)
       - TEMPLATE=rustdesk
+      # ===== Встроенный генератор кастомных клиентов (GitHub Actions) =====
+      # Репозиторий с воркфлоу generator-*.yml (этот репозиторий)
+      - GH_USER=your-github-user
+      - GH_REPO=rustdesk-api
+      - GH_BRANCH=main
+      # PAT с правом запускать Actions (actions:write)
+      - GH_TOKEN=your-github-token
+      # Публичный URL этого сервера, доступный раннерам GitHub
+      - GENURL=https://rd.example.com:21114
+      # Пароль AES-архива с секретами сборки (совпадает с секретом ZIP_PASSWORD
+      # репозитория GitHub только при использовании готовых воркфлоу без изменений)
+      - ZIP_PASSWORD=change-me
+      - PROTOCOL=https
+      # Необязательно: секрет self-hosted сборки (sh-generator-windows.yml)
+      # - SH_SECRET=
     volumes:
       - ./static:/app/static
       - ./templates:/app/templates

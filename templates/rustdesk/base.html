@@ -20,22 +20,23 @@
     <header class="rd-topbar">
         <div class="rd-brand">
             <img src="/theme/img/logo.svg" alt="RustDesk">
-            <span class="rd-title">RustDesk Консоль</span>
+            <span class="rd-title" data-i18n="console_title">RustDesk Консоль</span>
         </div>
         <div class="rd-top-actions">
-            <button class="icon-btn" data-action="toggle-theme" title="Сменить схему"><i class="fas fa-moon"></i></button>
+            <span data-lang-switch></span>
+            <button class="icon-btn" data-action="toggle-theme" data-i18n-title="theme_toggle"><i class="fas fa-moon"></i></button>
             <span class="rd-user"><span class="avatar">{{ username[:1] if username else 'U' }}</span>{{ username }}</span>
-            <a class="icon-btn" href="/logout" title="Выход"><i class="fas fa-sign-out-alt"></i></a>
+            <a class="icon-btn" href="/logout" data-i18n-title="logout"><i class="fas fa-sign-out-alt"></i></a>
         </div>
     </header>
     <div class="rd-body">
         <aside class="rd-sidebar">
             <nav class="rd-nav">
-                <a href="/" class="{% if active == 'index' %}active{% endif %}"><i class="fas fa-desktop"></i> Устройства</a>
-                <a href="/ab" class="{% if active == 'ab' %}active{% endif %}"><i class="fas fa-book"></i> Адресная книга</a>
-                {% if is_admin %}<a href="/admin" class="{% if active == 'admin' %}active{% endif %}"><i class="fas fa-users-cog"></i> Управление</a>{% endif %}
-                {% if is_admin %}<a href="/audit" class="{% if active == 'audit' %}active{% endif %}"><i class="fas fa-shield-alt"></i> Аудит безопасности</a>{% endif %}
-                {% if is_admin %}<a href="/clientgen" class="{% if active == 'clientgen' %}active{% endif %}"><i class="fas fa-hammer"></i> Создание клиента</a>{% endif %}
+                <a href="/" class="{% if active == 'index' %}active{% endif %}"><i class="fas fa-desktop"></i> <span data-i18n="nav_devices">Устройства</span></a>
+                <a href="/ab" class="{% if active == 'ab' %}active{% endif %}"><i class="fas fa-book"></i> <span data-i18n="nav_device_lists">Списки устройств</span></a>
+                {% if is_admin %}<a href="/admin" class="{% if active == 'admin' %}active{% endif %}"><i class="fas fa-users-cog"></i> <span data-i18n="nav_users">Пользователи</span></a>{% endif %}
+                {% if is_admin %}<a href="/audit" class="{% if active == 'audit' %}active{% endif %}"><i class="fas fa-shield-alt"></i> <span data-i18n="nav_audit">Аудит безопасности</span></a>{% endif %}
+                {% if is_admin %}<a href="/clientgen" class="{% if active == 'clientgen' %}active{% endif %}"><i class="fas fa-hammer"></i> <span data-i18n="nav_clientgen">Создание клиента</span></a>{% endif %}
             </nav>
         </aside>
         <main class="content">
@@ -43,6 +44,7 @@
         </main>
     </div>
 </div>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/ui.js"></script>
 {% block scripts %}{% endblock %}
 </body>

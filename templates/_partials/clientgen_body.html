@@ -1,26 +1,26 @@
-<h1 class="page-title">Создание клиента</h1>
+<h1 class="page-title" data-i18n="nav_clientgen">Создание клиента</h1>
 
 <div id="cfgListView">
     <div class="panel">
         <div class="panel-head">
-            <h3>Конфигурации клиентов</h3>
+            <h3 data-i18n="cg_configs">Конфигурации клиентов</h3>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button class="btn btn-primary" onclick="openEditor()"><i class="fas fa-plus"></i> Создать</button>
+                <button class="btn btn-primary" onclick="openEditor()"><i class="fas fa-plus"></i> <span data-i18n="create">Создать</span></button>
                 <button class="btn btn-ghost" onclick="loadConfigs()"><i class="fas fa-sync-alt"></i></button>
             </div>
         </div>
         <div class="table-wrapper">
             <table class="computers-table">
                 <thead><tr>
-                    <th>Название конфигурации</th>
-                    <th>ОС</th>
-                    <th>Версия клиента</th>
-                    <th>Сборка</th>
-                    <th>Дата сборки</th>
-                    <th>Автор</th>
-                    <th>Действия</th>
+                    <th data-i18n="cg_col_name">Название конфигурации</th>
+                    <th data-i18n="cg_col_os">ОС</th>
+                    <th data-i18n="cg_col_version">Версия клиента</th>
+                    <th data-i18n="cg_col_build">Сборка</th>
+                    <th data-i18n="cg_col_build_date">Дата сборки</th>
+                    <th data-i18n="cg_col_author">Автор</th>
+                    <th data-i18n="col_actions">Действия</th>
                 </tr></thead>
-                <tbody id="cfgBody"><tr><td colspan="7" class="empty-state">Загрузка...</td></tr></tbody>
+                <tbody id="cfgBody"><tr><td colspan="7" class="empty-state" data-i18n="loading">Загрузка...</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -40,62 +40,62 @@
     <div class="cg-grid">
         <div class="cg-col">
             <div class="panel cg-section">
-                <h3>General</h3>
+                <h3 data-i18n="cg_general">General</h3>
                 <div class="form-group cg-field">
-                    <label for="cgName"><span class="req">*</span> Name of the configuration</label>
-                    <input type="text" id="cgName" placeholder="Please enter">
+                    <label for="cgName"><span class="req">*</span> <span data-i18n="cg_name_label">Name of the configuration</span></label>
+                    <input type="text" id="cgName" data-i18n-ph="cg_enter" placeholder="Please enter">
                     <div class="cg-err" id="errName"></div>
                 </div>
                 <div class="form-group cg-field">
-                    <label for="cgAppName"><span class="req">*</span> Application name
-                        <span class="cg-tip" title="Display name of the branded client (English characters only)">?</span></label>
-                    <input type="text" id="cgAppName" placeholder="Please enter">
+                    <label for="cgAppName"><span class="req">*</span> <span data-i18n="cg_appname_label">Application name</span>
+                        <span class="cg-tip" data-i18n-title="cg_appname_tip" title="Display name of the branded client (English characters only)">?</span></label>
+                    <input type="text" id="cgAppName" data-i18n-ph="cg_enter" placeholder="Please enter">
                     <div class="cg-err" id="errAppName"></div>
                 </div>
                 <div class="form-group cg-field">
-                    <label for="cgVersion">Version</label>
+                    <label for="cgVersion" data-i18n="cg_version_label">Version</label>
                     <select id="cgVersion"></select>
                 </div>
                 <div class="form-group cg-field" id="cgArchRow">
-                    <label for="cgArch">CPU Architecture</label>
+                    <label for="cgArch" data-i18n="cg_arch_label">CPU Architecture</label>
                     <select id="cgArch"><option value="x64">x64</option><option value="x86">x86</option></select>
                 </div>
                 <div class="form-group cg-field">
-                    <label><span class="req">*</span> Connection type</label>
+                    <label><span class="req">*</span> <span data-i18n="cg_conn_type">Connection type</span></label>
                     <div class="cg-radio-row">
-                        <label><input type="radio" name="cgDirection" value="both" checked> Bidirectional</label>
-                        <label><input type="radio" name="cgDirection" value="incoming"> Incoming</label>
-                        <label><input type="radio" name="cgDirection" value="outgoing"> Outgoing</label>
+                        <label><input type="radio" name="cgDirection" value="both" checked> <span data-i18n="cg_dir_both">Bidirectional</span></label>
+                        <label><input type="radio" name="cgDirection" value="incoming"> <span data-i18n="cg_dir_in">Incoming</span></label>
+                        <label><input type="radio" name="cgDirection" value="outgoing"> <span data-i18n="cg_dir_out">Outgoing</span></label>
                     </div>
                 </div>
                 <div class="form-group cg-field">
-                    <label>Options</label>
+                    <label data-i18n="cg_options">Options</label>
                     <div class="cg-checks">
-                        <label><input type="checkbox" id="cgDisableInstall"> Disable installation
-                            <span class="cg-tip" title="The client cannot be installed into the system, portable mode only">?</span></label>
-                        <label><input type="checkbox" id="cgDisableSettings"> Disable settings
-                            <span class="cg-tip" title="The client settings window is blocked">?</span></label>
+                        <label><input type="checkbox" id="cgDisableInstall"> <span data-i18n="cg_disable_install">Disable installation</span>
+                            <span class="cg-tip" data-i18n-title="cg_disable_install_tip" title="The client cannot be installed into the system, portable mode only">?</span></label>
+                        <label><input type="checkbox" id="cgDisableSettings"> <span data-i18n="cg_disable_settings">Disable settings</span>
+                            <span class="cg-tip" data-i18n-title="cg_disable_settings_tip" title="The client settings window is blocked">?</span></label>
                     </div>
                 </div>
                 <div class="form-group cg-field">
-                    <label for="cgNote">Note</label>
-                    <textarea id="cgNote" rows="4" style="width:100%;font:inherit;font-size:.88rem;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;" placeholder="Some note about this configuration"></textarea>
+                    <label for="cgNote" data-i18n="cg_note">Note</label>
+                    <textarea id="cgNote" rows="4" style="width:100%;font:inherit;font-size:.88rem;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;" data-i18n-ph="cg_note_ph" placeholder="Some note about this configuration"></textarea>
                 </div>
             </div>
         </div>
 
         <div class="cg-col">
             <div class="panel cg-section">
-                <h3>Custom server</h3>
+                <h3 data-i18n="cg_server">Custom server</h3>
                 <div class="form-group cg-field">
-                    <label for="cgHost">Host:</label>
+                    <label for="cgHost" data-i18n="cg_host">Host:</label>
                     <input type="text" id="cgHost" placeholder="rd.example.com">
                 </div>
                 <div class="form-group cg-field">
-                    <label for="cgKey">Key:</label>
+                    <label for="cgKey" data-i18n="cg_key">Key:</label>
                     <div class="cg-key-row">
-                        <input type="text" id="cgKey" placeholder="Base64 public key">
-                        <button type="button" class="icon-btn" title="Copy" onclick="copyKey()"><i class="fas fa-copy"></i></button>
+                        <input type="text" id="cgKey" data-i18n-ph="cg_key_ph" placeholder="Base64 public key">
+                        <button type="button" class="icon-btn" data-i18n-title="copy" onclick="copyKey()"><i class="fas fa-copy"></i></button>
                     </div>
                 </div>
                 <div class="form-group cg-field" style="margin-bottom:0;">
@@ -105,49 +105,49 @@
             </div>
 
             <div class="panel cg-section">
-                <h3>Visual</h3>
+                <h3 data-i18n="cg_visual">Visual</h3>
                 <div class="form-group cg-field">
-                    <label>Application icon <span class="cg-tip" title="PNG, square dimensions">?</span></label>
-                    <label class="cg-upload" for="cgIconFile"><i class="fas fa-upload"></i> Click or drag to upload</label>
+                    <label><span data-i18n="cg_icon">Application icon</span> <span class="cg-tip" data-i18n-title="cg_icon_tip" title="PNG, square dimensions">?</span></label>
+                    <label class="cg-upload" for="cgIconFile"><i class="fas fa-upload"></i> <span data-i18n="cg_upload">Click or drag to upload</span></label>
                     <input type="file" id="cgIconFile" accept="image/png" style="display:none" onchange="pickImage(this,'icon')">
                     <div class="cg-preview" id="iconPreview"><img alt=""><span class="name"></span>
-                        <button type="button" class="icon-btn" title="Remove" onclick="clearImage('icon')"><i class="fas fa-times"></i></button></div>
+                        <button type="button" class="icon-btn" data-i18n-title="remove" onclick="clearImage('icon')"><i class="fas fa-times"></i></button></div>
                     <div class="cg-err" id="errIcon"></div>
                 </div>
                 <div class="form-group cg-field" style="margin-bottom:0;">
-                    <label>Light Logo <span class="cg-tip" title="PNG, shown on dark backgrounds">?</span></label>
-                    <label class="cg-upload" for="cgLogoFile"><i class="fas fa-upload"></i> Click or drag to upload</label>
+                    <label><span data-i18n="cg_logo">Light Logo</span> <span class="cg-tip" data-i18n-title="cg_logo_tip" title="PNG, shown on dark backgrounds">?</span></label>
+                    <label class="cg-upload" for="cgLogoFile"><i class="fas fa-upload"></i> <span data-i18n="cg_upload">Click or drag to upload</span></label>
                     <input type="file" id="cgLogoFile" accept="image/png" style="display:none" onchange="pickImage(this,'logo')">
                     <div class="cg-preview" id="logoPreview"><img alt=""><span class="name"></span>
-                        <button type="button" class="icon-btn" title="Remove" onclick="clearImage('logo')"><i class="fas fa-times"></i></button></div>
+                        <button type="button" class="icon-btn" data-i18n-title="remove" onclick="clearImage('logo')"><i class="fas fa-times"></i></button></div>
                     <div class="cg-err" id="errLogo"></div>
                 </div>
             </div>
 
             <div class="panel cg-section">
-                <h3>Security</h3>
+                <h3 data-i18n="cg_security">Security</h3>
                 <div class="cg-switch-row">
-                    <span>Preset password :</span>
+                    <span data-i18n="cg_preset_pass">Preset password :</span>
                     <label class="switch"><input type="checkbox" id="cgPresetPass" onchange="togglePresetPass()"><span class="slider"></span></label>
                 </div>
                 <div class="form-group cg-field cg-collapsible" id="cgPassRow" style="margin-bottom:0;">
-                    <label for="cgPassValue">Permanent password</label>
-                    <input type="text" id="cgPassValue" placeholder="Please enter">
+                    <label for="cgPassValue" data-i18n="cg_perm_pass">Permanent password</label>
+                    <input type="text" id="cgPassValue" data-i18n-ph="cg_enter" placeholder="Please enter">
                     <div class="cg-err" id="errPass"></div>
                 </div>
             </div>
 
             <div class="panel cg-section">
-                <h3>Advanced <span class="cg-tip" title="Manual key=value lines merged into default/override settings of the custom client">?</span></h3>
+                <h3><span data-i18n="cg_advanced">Advanced</span> <span class="cg-tip" data-i18n-title="cg_advanced_tip" title="Manual key=value lines merged into default/override settings of the custom client">?</span></h3>
                 <div class="cg-switch-row">
-                    <span>Override settings :</span>
+                    <span data-i18n="cg_override_settings">Override settings :</span>
                     <label class="switch"><input type="checkbox" id="cgOverrideOn" onchange="toggleAdvanced()"><span class="slider"></span></label>
                 </div>
                 <div class="form-group cg-field cg-collapsible" id="cgOverrideRow">
                     <textarea id="cgOverrideManual" rows="4" style="width:100%;font-family:var(--mono);font-size:.8rem;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;" placeholder="key=value&#10;disable-udp=Y"></textarea>
                 </div>
                 <div class="cg-switch-row">
-                    <span>Default settings :</span>
+                    <span data-i18n="cg_default_settings">Default settings :</span>
                     <label class="switch"><input type="checkbox" id="cgDefaultOn" onchange="toggleAdvanced()"><span class="slider"></span></label>
                 </div>
                 <div class="form-group cg-field cg-collapsible" id="cgDefaultRow" style="margin-bottom:0;">
@@ -158,8 +158,8 @@
     </div>
 
     <div class="cg-foot">
-        <button class="btn btn-ghost" onclick="closeEditor()">Back</button>
-        <button class="btn btn-primary" id="cgSaveBtn" onclick="saveCfg()">Create</button>
+        <button class="btn btn-ghost" onclick="closeEditor()" data-i18n="back">Back</button>
+        <button class="btn btn-primary" id="cgSaveBtn" onclick="saveCfg()" data-i18n="create">Create</button>
     </div>
 </div>
 

@@ -1,19 +1,19 @@
-<h1 class="page-title">Устройства</h1>
+<h1 class="page-title" data-i18n="nav_devices">Устройства</h1>
 
 <div class="panel">
     <div class="search-panel search-wrapper">
         <div class="search-input-wrapper">
             <i class="fas fa-search"></i>
-            <input type="text" id="searchInput" class="search-input" placeholder="Поиск по имени компьютера, пользователю или ID...">
+            <input type="text" id="searchInput" class="search-input" data-i18n-ph="devices_search_ph" placeholder="Поиск по имени компьютера, пользователю или ID...">
         </div>
         <select id="searchType" class="search-type-select">
-            <option value="all">Все поля</option>
-            <option value="hostname">Имя ПК</option>
-            <option value="username">Пользователь</option>
-            <option value="id">ID оборудования</option>
-            <option value="ip">IP адрес</option>
+            <option value="all" data-i18n="search_all">Все поля</option>
+            <option value="hostname" data-i18n="search_hostname">Имя ПК</option>
+            <option value="username" data-i18n="search_username">Пользователь</option>
+            <option value="id" data-i18n="search_device_id">ID оборудования</option>
+            <option value="ip" data-i18n="search_ip">IP адрес</option>
         </select>
-        <button class="btn btn-ghost refresh-btn" onclick="loadComputers()"><i class="fas fa-sync-alt"></i> Обновить</button>
+        <button class="btn btn-ghost refresh-btn" onclick="loadComputers()"><i class="fas fa-sync-alt"></i> <span data-i18n="refresh">Обновить</span></button>
     </div>
     <div class="panel-body" style="padding-top:0;">
         <div class="search-info" id="searchInfo" style="color:var(--muted);font-size:.82rem;"></div>
@@ -21,30 +21,36 @@
 </div>
 
 <div class="panel">
-    <div class="panel-head"><h3>Список устройств</h3></div>
+    <div class="panel-head"><h3 data-i18n="devices_list">Список устройств</h3></div>
     <div class="table-wrapper">
         <table class="computers-table" id="computersTable">
             <thead>
                 <tr>
-                    <th>№</th><th>Наименование оборудования</th><th>ID оборудования</th>
-                    <th>Пользователь</th><th>IP адрес</th><th>Статус</th><th>Последний контакт</th>
+                    <th data-i18n="col_num">№</th>
+                    <th data-i18n="col_device_name">Имя устройства</th>
+                    <th data-i18n="col_device_id">ID оборудования</th>
+                    <th data-i18n="col_user">Пользователь</th>
+                    <th data-i18n="col_ip">IP адрес</th>
+                    <th data-i18n="col_status">Статус</th>
+                    <th data-i18n="col_last_contact">Последний контакт</th>
+                    <th data-i18n="col_actions">Действия</th>
                 </tr>
             </thead>
             <tbody id="tableBody">
-                <tr><td colspan="7" class="empty-state"><i class="fas fa-spinner fa-pulse"></i>Загрузка данных...</td></tr>
+                <tr><td colspan="8" class="empty-state"><i class="fas fa-spinner fa-pulse"></i><span data-i18n="loading">Загрузка данных...</span></td></tr>
             </tbody>
         </table>
     </div>
     <div class="pagination-wrapper" id="paginationWrapper" style="display:none;">
-        <button class="page-btn" id="prevBtn" onclick="prevPage()"><i class="fas fa-chevron-left"></i> Назад</button>
+        <button class="page-btn" id="prevBtn" onclick="prevPage()"><i class="fas fa-chevron-left"></i> <span data-i18n="prev">Назад</span></button>
         <span class="page-info" id="pageInfo">Страница 1</span>
-        <button class="page-btn" id="nextBtn" onclick="nextPage()">Вперед <i class="fas fa-chevron-right"></i></button>
+        <button class="page-btn" id="nextBtn" onclick="nextPage()"><span data-i18n="next">Вперед</span> <i class="fas fa-chevron-right"></i></button>
     </div>
 </div>
 
 <div id="floatingTooltip" class="modal" style="display:none;background:transparent;justify-content:flex-start;align-items:flex-start;pointer-events:none;">
     <div class="modal-content" style="max-width:340px;pointer-events:auto;position:fixed;" id="tooltipBox">
-        <div class="modal-header"><h3 id="tooltipTitle">Информация</h3><button class="close" onclick="hideTooltip()">&times;</button></div>
+        <div class="modal-header"><h3 id="tooltipTitle" data-i18n="device_info">Информация</h3><button class="close" onclick="hideTooltip()">&times;</button></div>
         <div id="tooltipBody"></div>
     </div>
 </div>

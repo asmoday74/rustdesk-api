@@ -111,7 +111,7 @@ def init_clientgen_routes(app):
         user, err = _admin()
         if err:
             return err
-        cfg = clientgen.get_config(cid)
+        cfg = clientgen.refresh_build_status(cid)
         if not cfg:
             return _error('ItemNotFound', 404)
         return jsonify({'build_status': cfg['build_status'],
