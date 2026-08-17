@@ -48,8 +48,13 @@ def main():
     # ---- группы ----
     grp_map = {}
     for guid, name, gtype in q("SELECT guid,name,type FROM grp"):
+        gname = s(name)
+        p.execute("SELECT id FROM groups WHERE name=%s", (gname,))
+        ex = p.fetchone()
+        if ex:
+            grp_map[guid] = ex[0]; continue
         p.execute("INSERT INTO groups (name,type) VALUES (%s,%s) RETURNING id",
-                  (s(name), 2 if gtype == 2 else 1))
+                  (gname, 2 if gtype == 2 else 1))
         grp_map[guid] = p.fetchone()[0]
     print('groups:', len(grp_map))
 
@@ -83,8 +88,9 @@ def main():
         p.execute("""INSERT INTO computers (id,uuid,hostname,username,os,cpu,memory,version,
                      user_id,group_id,last_online,last_online_timestamp)
                      VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,0)""",
-                  (s(pid), b64(puuid), jget(info,'hostname'), jget(info,'username'),
-                   jget(info,'os'), jget(info,'cpu'), jget(info,'memory'), jget(info,'version'),
+                  (s(pid), b64(puuid), jget(info,'device_name') or jget(info,'hostname'),
+                   jget(info,'username'), jget(info,'os'), jget(info,'cpu'),
+                   jget(info,'memory'), jget(info,'version'),
                    uid, gid or 1, ts(last_online)))
         peer_id_by_guid[guid] = s(pid); n += 1
     print('computers:', n)
@@ -116,7 +122,7 @@ def main():
                      VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
                   (rust_id,
                    (row and row[1]) or jget(info,'username'),
-                   (row and row[0]) or jget(info,'hostname'),
+                   (row and row[0]) or jget(info,'device_name') or jget(info,'hostname'),
                    jget(info,'alias'), (row and row[2]) or '',
                    jget(info,'hash'), owner_id, coll_id))
         n += 1

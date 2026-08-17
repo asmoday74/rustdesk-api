@@ -307,12 +307,12 @@ docker-compose down -v
 
 ### Миграция с rustdesk-server-pro (sqlite3 → PostgreSQL)
 
-Скрипт `migrate_pro_to_pg.py` переносит из `db.sqlite3` (pro): пользователей
-(bcrypt-пароли сохраняются — `verify_password` понимает bcrypt), группы,
-устройства, адресные книги/коллекции/теги/правила и аудит (соединения/файлы).
+Скрипт `migrate_pro_to_pg.py` переносит из `db.sqlite3` (pro): пользователей,
+группы, устройства, адресные книги/коллекции/теги/правила и аудит
+(соединения/файлы).
 
 ```bash
-pip install bcrypt psycopg2-binary
+pip install psycopg2-binary
 # сначала поднимите стек один раз, чтобы приложение создало таблицы
 python migrate_pro_to_pg.py /path/to/db.sqlite3 \
     postgresql://rustdesk:rustdesk@<host>:5432/rustdesk_monitor
@@ -320,6 +320,11 @@ python migrate_pro_to_pg.py /path/to/db.sqlite3 \
 
 Миграция идемпотентна по логинам (существующие пользователи, напр. admin, не
 дублируются — используется их id). Запускайте после первого старта приложения.
+
+> Пароли pro перенести нельзя: pro хешировал их с внутренним преобразованием
+> (bcrypt не проходит проверку), а bcrypt в проекте отключён для совместимости
+> со sveApiRust (только PBKDF2). После миграции сбросьте пароли pro-пользователей
+> (через админку или `hash_password`), затем смените после входа.
 
 ### Миграция с SQLite на PostgreSQL
 
