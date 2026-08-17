@@ -546,6 +546,15 @@ check('cleanzip ok', r.status_code == 200)
 r = anon.get('/get_png?uuid=u-cb-1&filename=icon.png')
 check('get_png absent 404', r.status_code == 404)
 
+# ---- refresh при пустом github_run_id (fallback, без GH_TOKEN) ----
+fake_execute_query(
+    "UPDATE client_configs SET build_status='running', github_run_id='' WHERE id=%s", (cid,))
+r = anon.get(f'/api/web/clientgen/configs/{cid}/status')
+check('refresh w/o run_id does not crash', r.status_code == 200
+      and r.get_json()['build_status'] == 'running')
+r = anon.get('/api/web/clientgen/configs')
+check('list refreshes running w/o crash', r.status_code == 200)
+
 r = anon.delete(f'/api/web/clientgen/configs/{cid}')
 check('clientgen delete', r.status_code == 200)
 # non-admin denied

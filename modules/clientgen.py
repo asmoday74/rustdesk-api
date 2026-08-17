@@ -337,7 +337,7 @@ def start_build(cid):
         r = requests.post(dispatch_url, json=payload, headers=_github_headers(), timeout=30)
     except Exception as e:
         return False, 'GitHub API: %s' % e
-    if r.status_code not in (200, 204):
+    if r.status_code not in (200, 201, 204):
         details = ''
         try:
             details = r.json().get('message', '')
@@ -346,12 +346,14 @@ def start_build(cid):
         return False, 'GitHub отклонил запуск сборки (HTTP %s)%s' % (
             r.status_code, ': ' + details if details else '')
 
+    # ID запуска: return_run_details может вернуть его в разных полях,
+    # а при 204 тела нет вовсе — тогда ID будет определён позже по списку запусков
     run_id = ''
     log_url = ''
     try:
         body = r.json()
-        run_id = str(body.get('workflow_run_id') or '')
-        log_url = body.get('html_url') or ''
+        run_id = str(body.get('workflow_run_id') or body.get('id') or '')
+        log_url = body.get('html_url') or body.get('workflow_run_url') or ''
     except Exception:
         pass
 
@@ -365,6 +367,8 @@ def start_build(cid):
 
 def _github_run_status(run_id):
     """Состояние запуска GitHub Actions: (status, conclusion, html_url)."""
+    if not GH_TOKEN:
+        return None, None, ''
     import requests
     try:
         r = requests.get(_github_api('actions/runs/%s' % run_id),
@@ -377,12 +381,43 @@ def _github_run_status(run_id):
         return None, None, ''
 
 
+def _resolve_run_id(workflow, branch):
+    """ID последнего запуска воркфлоу на ветке (когда dispatch не вернул ID)."""
+    if not GH_TOKEN:
+        return ''
+    import requests
+    try:
+        r = requests.get(
+            _github_api('actions/workflows/%s/runs' % workflow),
+            params={'branch': branch, 'event': 'workflow_dispatch', 'per_page': 5},
+            headers=_github_headers(), timeout=30)
+        if r.status_code != 200:
+            return ''
+        runs = r.json().get('workflow_runs') or []
+        if runs:
+            return str(runs[0].get('id') or '')
+    except Exception:
+        pass
+    return ''
+
+
 def refresh_build_status(cid):
     """Ленивый поллинг GitHub (как _get_run_status в rdgen). Вызывается из /status."""
     cfg = get_config(cid)
-    if not cfg or cfg['build_status'] != 'running' or not cfg.get('github_run_id'):
+    if not cfg or cfg['build_status'] != 'running':
         return cfg
-    status, conclusion, html_url = _github_run_status(cfg['github_run_id'])
+    run_id = (cfg.get('github_run_id') or '').strip()
+    if not run_id:
+        # ID запуска не был получен при dispatch — определяем по списку запусков
+        workflow = WORKFLOW_BY_PLATFORM.get(cfg.get('platform') or 'windows',
+                                            'generator-windows.yml')
+        run_id = _resolve_run_id(workflow, GH_BRANCH)
+        if not run_id:
+            return cfg
+        execute_query(
+            "UPDATE client_configs SET github_run_id=%s, updated_at=NOW() WHERE id=%s",
+            (run_id, cid))
+    status, conclusion, html_url = _github_run_status(run_id)
     if status == 'completed' and conclusion:
         if conclusion == 'success':
             execute_query("""
@@ -397,6 +432,13 @@ def refresh_build_status(cid):
             """, ('\nGitHub run: ' + html_url if html_url else '', cid))
         return get_config(cid)
     return cfg
+
+
+def refresh_running_configs():
+    """Обновить статусы всех выполняющихся сборок (вызывается при показе списка)."""
+    for cfg in list_configs():
+        if cfg['build_status'] == 'running':
+            refresh_build_status(cfg['id'])
 
 
 def apply_callback_status(uuid_val, status):

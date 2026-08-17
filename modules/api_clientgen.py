@@ -23,6 +23,7 @@ def init_clientgen_routes(app):
         user, err = _admin()
         if err:
             return err
+        clientgen.refresh_running_configs()
         return jsonify(clientgen.list_configs())
 
     @app.route('/api/web/clientgen/configs', methods=['POST'])
