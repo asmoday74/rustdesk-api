@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import zipfile
 
@@ -97,7 +98,8 @@ def _run_build(cid):
     try:
         with open(cfg_path, 'w', encoding='utf-8') as f:
             f.write(cfg['config_json'])
-        cmd = [RDGEN_CLI, '-f', cfg_path, '-s', RDGEN_SERVER, '-d']
+        exe = [sys.executable] if RDGEN_CLI.endswith('.py') else []
+        cmd = exe + [RDGEN_CLI, '-f', cfg_path, '-s', RDGEN_SERVER, '-d']
         proc = subprocess.run(cmd, cwd=art, capture_output=True, text=True, timeout=3600)
         log = (proc.stdout or '') + (proc.stderr or '')
         if proc.returncode == 0:

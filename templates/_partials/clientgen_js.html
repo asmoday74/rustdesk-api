@@ -72,9 +72,10 @@
 
     async function startBuild(id){
         try{ const r=await fetch(`/api/web/clientgen/configs/${id}/build`,{method:'POST'});
-            const d=await r.json(); if(!r.ok){ alert(d.error||'Ошибка'); return; }
+            const d=await r.json().catch(()=>({}));
+            if(!r.ok){ alert(d.error || ('Ошибка сборки (HTTP '+r.status+')')); return; }
             loadConfigs(); pollStatus(id);
-        }catch(e){ alert(e); }
+        }catch(e){ alert('Ошибка: '+e); }
     }
     function pollStatus(id){
         const t=setInterval(async()=>{
