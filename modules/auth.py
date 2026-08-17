@@ -16,6 +16,10 @@ def hash_password(password, salt=None):
 
 def verify_password(stored_password, provided_password):
     try:
+        # bcrypt-хеши, перенесённые из rustdesk-server-pro
+        if stored_password.startswith(('$2a$', '$2b$', '$2y$')):
+            import bcrypt
+            return bcrypt.checkpw(provided_password.encode(), stored_password.encode())
         salt, stored_hash = stored_password.split(':')
         hash_obj = hashlib.pbkdf2_hmac('sha256', provided_password.encode(), salt.encode(), 100000)
         return hash_obj.hex() == stored_hash

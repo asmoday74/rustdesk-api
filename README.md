@@ -305,6 +305,22 @@ docker-compose restart
 docker-compose down -v
 ```
 
+### Миграция с rustdesk-server-pro (sqlite3 → PostgreSQL)
+
+Скрипт `migrate_pro_to_pg.py` переносит из `db.sqlite3` (pro): пользователей
+(bcrypt-пароли сохраняются — `verify_password` понимает bcrypt), группы,
+устройства, адресные книги/коллекции/теги/правила и аудит (соединения/файлы).
+
+```bash
+pip install bcrypt psycopg2-binary
+# сначала поднимите стек один раз, чтобы приложение создало таблицы
+python migrate_pro_to_pg.py /path/to/db.sqlite3 \
+    postgresql://rustdesk:rustdesk@<host>:5432/rustdesk_monitor
+```
+
+Миграция идемпотентна по логинам (существующие пользователи, напр. admin, не
+дублируются — используется их id). Запускайте после первого старта приложения.
+
 ### Миграция с SQLite на PostgreSQL
 
 Если у вас есть данные в SQLite:
