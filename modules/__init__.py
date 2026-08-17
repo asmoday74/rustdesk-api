@@ -39,3 +39,4 @@ from modules.api_auth import init_auth_routes
 from modules.api_computers import init_computers_routes
 from modules.api_public import init_public_routes
 from modules.api_ab import init_ab_routes
+from modules.api_clientgen import init_clientgen_routes

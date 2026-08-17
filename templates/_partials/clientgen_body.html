@@ -1,0 +1,38 @@
+<h1 class="page-title">Создание клиента</h1>
+
+<div class="panel">
+    <div class="panel-head">
+        <h3>Конфигурации клиентов</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="openCfgModal()"><i class="fas fa-plus"></i> Создать</button>
+            <button class="btn btn-ghost" onclick="loadConfigs()"><i class="fas fa-sync-alt"></i></button>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="computers-table">
+            <thead><tr>
+                <th>Название конфигурации</th>
+                <th>ОС</th>
+                <th>Версия клиента</th>
+                <th>Сборка</th>
+                <th>Дата сборки</th>
+                <th>Автор</th>
+                <th>Действия</th>
+            </tr></thead>
+            <tbody id="cfgBody"><tr><td colspan="7" class="empty-state">Загрузка...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Модалка конфигурации -->
+<div id="cfgModal" class="modal"><div class="modal-content" style="max-width:700px;">
+    <div class="modal-header"><h3 id="cfgModalTitle">Новая конфигурация</h3><button class="close" onclick="closeModal('cfgModal')">&times;</button></div>
+    <form id="cfgForm" onsubmit="saveCfg(event)">
+        <div class="form-group"><label>Название конфигурации *</label><input type="text" id="cfgName" required></div>
+        <div class="form-group"><label>Платформа (ОС)</label>
+            <select id="cfgPlatform"><option value="windows">Windows</option><option value="linux">Linux</option><option value="macos">macOS</option><option value="android">Android</option></select></div>
+        <div class="form-group"><label>Версия клиента</label><input type="text" id="cfgVersion" placeholder="1.4.9"></div>
+        <div class="form-group"><label>Конфигурация (JSON)</label><textarea id="cfgJson" rows="12" style="width:100%;font-family:monospace;font-size:.8rem;"></textarea></div>
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+    </form>
+</div></div>

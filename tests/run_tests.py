@@ -21,6 +21,8 @@ import modules.ab as ab_mod          # noqa: E402
 import modules.api_ab as api_ab_mod  # noqa: E402
 import modules.auth as auth_mod      # noqa: E402
 import modules.api_auth as api_auth_mod  # noqa: E402
+import modules.clientgen as clientgen_mod  # noqa: E402
+import modules.api_clientgen as api_clientgen_mod  # noqa: E402
 
 conn = sqlite3.connect(':memory:', check_same_thread=False)
 conn.row_factory = sqlite3.Row
@@ -63,12 +65,15 @@ def fake_execute_query(query, params=None, fetch_one=False, fetch_all=False, ret
         if 'duplicate column' in str(e).lower():
             return 0
         raise
-    conn.commit()
     if fetch_one:
         row = cur.fetchone()
+        conn.commit()
         return dict(row) if row else None
     if fetch_all:
-        return [dict(r) for r in cur.fetchall()]
+        rows = [dict(r) for r in cur.fetchall()]
+        conn.commit()
+        return rows
+    conn.commit()
     return cur.rowcount
 
 
@@ -101,7 +106,7 @@ class TransConn:
         return getattr(self.c, name)
 
 
-for _mod in (database, ab_mod, api_ab_mod, auth_mod, api_auth_mod):
+for _mod in (database, ab_mod, api_ab_mod, auth_mod, api_auth_mod, clientgen_mod, api_clientgen_mod):
     _mod.execute_query = fake_execute_query
 
 database.get_db_connection = lambda: TransConn(conn)
@@ -465,5 +470,28 @@ r = anon.get('/ab')
 check('/ab served when authenticated', r.status_code == 200 and b'data-design=' in r.data)
 r = anon.get('/login')
 check('/login renders', r.status_code == 200 and b'data-design=' in r.data)
+
+# ================= СОЗДАНИЕ КЛИЕНТА (clientgen) =================
+print('== clientgen ==')
+r = anon.get('/clientgen')
+check('/clientgen served (admin)', r.status_code == 200 and b'data-design=' in r.data)
+r = anon.post('/api/web/clientgen/configs', json={'name': 'test-cfg', 'config_json': {'platform': 'windows', 'version': '1.4.9'}})
+check('clientgen create', r.status_code == 201)
+cid = r.get_json()['id']
+r = anon.get('/api/web/clientgen/configs')
+check('clientgen list', r.status_code == 200 and any(c['id'] == cid for c in r.get_json()))
+r = anon.put(f'/api/web/clientgen/configs/{cid}', json={'name': 'test-cfg2', 'config_json': {'platform': 'linux', 'version': '1.4.9'}})
+check('clientgen update', r.status_code == 200)
+r = anon.get(f'/api/web/clientgen/configs/{cid}/status')
+check('clientgen status none', r.status_code == 200 and r.get_json()['build_status'] == 'none')
+r = anon.post(f'/api/web/clientgen/configs/{cid}/build')
+check('clientgen build blocked w/o RDGEN_CLI', r.status_code == 400)
+r = anon.delete(f'/api/web/clientgen/configs/{cid}')
+check('clientgen delete', r.status_code == 200)
+# non-admin denied
+r2 = flask_app.test_client()
+r2.post('/api/login', json={'username': 'user2', 'password': 'pass1234'})
+r = r2.get('/clientgen')
+check('/clientgen denied for non-admin', r.status_code in (302, 403))
 
 print(f'\nALL {passed} CHECKS PASSED')

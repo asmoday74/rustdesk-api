@@ -10,7 +10,7 @@ from modules import (
     init_db, init_db_pool, close_all_connections,
     get_user_by_username, create_user, add_audit_log,
     init_auth_routes, init_computers_routes, init_public_routes,
-    init_ab_routes
+    init_ab_routes, init_clientgen_routes
 )
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
@@ -106,6 +106,14 @@ def audit_page():
         return auth_check
     return render_template(f'{get_design()}/audit.html', **page_ctx('audit'))
 
+@app.route('/clientgen')
+def clientgen_page():
+    from modules.auth import require_admin
+    auth_check = require_admin(lambda: None)()
+    if auth_check is not None:
+        return auth_check
+    return render_template(f'{get_design()}/clientgen.html', **page_ctx('clientgen'))
+
 @app.route('/static/<path:filename>')
 def serve_static(filename):
     return send_from_directory('static', filename)
@@ -157,6 +165,7 @@ init_auth_routes(app)
 init_computers_routes(app)
 init_public_routes(app)
 init_ab_routes(app)
+init_clientgen_routes(app)
 
 # ========== ЗАПУСК ==========
 if __name__ == '__main__':

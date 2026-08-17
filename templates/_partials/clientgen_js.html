@@ -1,0 +1,92 @@
+<script>
+    function escapeHtml(s){ if(s===null||s===undefined) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+    function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+    const DEFAULT_CFG = {"platform":"windows","version":"1.4.9","delayFix":"on","exename":"MyApplication","appname":"MyApplication","direction":"both","installation":"installationY","settings":"settingsY","serverIP":"","key":"","apiServer":"","passApproveMode":"password-click","theme":"system"};
+    let configs = [];
+    let editCfgId = null;
+    const OS_ICON = {windows:'fab fa-windows', linux:'fab fa-linux', macos:'fab fa-apple', android:'fab fa-android'};
+
+    function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString('ru-RU'); }
+
+    async function loadConfigs(){
+        try{ const r=await fetch('/api/web/clientgen/configs'); if(!r.ok) return;
+            configs=await r.json(); renderConfigs(); }catch(e){}
+    }
+
+    function buildCell(c){
+        if(c.build_status==='running') return '<span class="status-online"><i class="fas fa-circle"></i>сборка...</span>';
+        let html='';
+        if(c.build_status==='success')
+            html += `<a class="btn btn-ghost btn-sm" href="/api/web/clientgen/configs/${c.id}/download"><i class="fas fa-download"></i> Скачать</a> `;
+        if(c.build_status!=='running')
+            html += `<button class="btn btn-primary btn-sm" onclick="startBuild(${c.id})"><i class="fas fa-hammer"></i> Собрать</button>`;
+        if(c.build_status==='failed') html += ' <span class="status-offline"><i class="fas fa-circle"></i>ошибка</span>';
+        return html || '—';
+    }
+
+    function renderConfigs(){
+        const tb=document.getElementById('cfgBody');
+        if(!configs.length){ tb.innerHTML='<tr><td colspan="7" class="empty-state">Конфигураций нет</td></tr>'; return; }
+        tb.innerHTML=configs.map(c=>`<tr>
+            <td><b>${escapeHtml(c.name)}</b></td>
+            <td><i class="${OS_ICON[c.platform]||'fas fa-desktop'}"></i> ${escapeHtml(c.platform||'')}</td>
+            <td>${escapeHtml(c.version||'—')}</td>
+            <td>${buildCell(c)}</td>
+            <td>${fmtDate(c.build_date)}</td>
+            <td>${escapeHtml(c.author||'')}</td>
+            <td><div class="action-cell">
+                <button class="btn btn-ghost btn-sm" onclick="openCfgModal(${c.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-ghost btn-sm" onclick="dupCfg(${c.id})"><i class="fas fa-copy"></i></button>
+                <button class="btn btn-danger btn-sm" onclick="delCfg(${c.id})"><i class="fas fa-trash"></i></button>
+            </div></td></tr>`).join('');
+    }
+
+    function openCfgModal(id){
+        editCfgId = id || null;
+        document.getElementById('cfgModalTitle').textContent = id? 'Редактировать конфигурацию':'Новая конфигурация';
+        if(id){ const c=configs.find(x=>x.id===id); if(!c) return;
+            document.getElementById('cfgName').value=c.name;
+            document.getElementById('cfgPlatform').value=c.platform||'windows';
+            document.getElementById('cfgVersion').value=c.version||'';
+            document.getElementById('cfgJson').value=c.config_json||'{}';
+        } else {
+            document.getElementById('cfgForm').reset();
+            document.getElementById('cfgJson').value=JSON.stringify(DEFAULT_CFG,null,2);
+        }
+        document.getElementById('cfgModal').classList.add('active');
+    }
+
+    async function saveCfg(e){
+        e.preventDefault();
+        const name=document.getElementById('cfgName').value.trim();
+        let cfg; try{ cfg=JSON.parse(document.getElementById('cfgJson').value||'{}'); }catch(err){ alert('Некорректный JSON'); return; }
+        cfg.platform=document.getElementById('cfgPlatform').value;
+        cfg.version=document.getElementById('cfgVersion').value||cfg.version||'';
+        const body={name, config_json: cfg};
+        try{
+            if(editCfgId) await fetch(`/api/web/clientgen/configs/${editCfgId}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+            else await fetch('/api/web/clientgen/configs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+            closeModal('cfgModal'); loadConfigs();
+        }catch(err){ alert(err); }
+    }
+
+    async function startBuild(id){
+        try{ const r=await fetch(`/api/web/clientgen/configs/${id}/build`,{method:'POST'});
+            const d=await r.json(); if(!r.ok){ alert(d.error||'Ошибка'); return; }
+            loadConfigs(); pollStatus(id);
+        }catch(e){ alert(e); }
+    }
+    function pollStatus(id){
+        const t=setInterval(async()=>{
+            try{ const r=await fetch(`/api/web/clientgen/configs/${id}/status`); const d=await r.json();
+                if(d.build_status!=='running'){ clearInterval(t); loadConfigs(); }
+            }catch(e){ clearInterval(t); }
+        }, 5000);
+    }
+
+    async function dupCfg(id){ try{ await fetch(`/api/web/clientgen/configs/${id}/duplicate`,{method:'POST'}); loadConfigs(); }catch(e){} }
+    async function delCfg(id){ if(!confirm('Удалить конфигурацию?')) return;
+        try{ await fetch(`/api/web/clientgen/configs/${id}`,{method:'DELETE'}); loadConfigs(); }catch(e){} }
+
+    loadConfigs();
+</script>

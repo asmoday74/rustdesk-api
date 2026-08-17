@@ -307,6 +307,24 @@ def init_db():
             )
         """)
 
+        # Конфигурации кастомных клиентов (Создание клиента)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS client_configs (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                platform TEXT DEFAULT 'windows',
+                version TEXT DEFAULT '',
+                author TEXT DEFAULT '',
+                config_json TEXT DEFAULT '{}',
+                build_status TEXT DEFAULT 'none',
+                build_log TEXT DEFAULT '',
+                build_date TIMESTAMPTZ,
+                artifact_dir TEXT DEFAULT '',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
         # Аудит подключений клиентов RustDesk (/api/audit/*)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS rustdesk_audits (
