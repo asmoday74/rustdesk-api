@@ -32,6 +32,14 @@ DEFAULT_CONFIG = {
     "permanentPassword": "", "defaultManual": "", "overrideManual": "", "note": "",
 }
 
+# обязательные ChoiceFields веб-формы rdgen (POST /generator), которых нет в
+# нашей схеме; rdgen-cli шлёт конфиг как form-data, без них форма invalid
+RDGEN_FORM_DEFAULTS = {
+    "theme": "system", "themeDorO": "default",
+    "passApproveMode": "password-click",
+    "permissionsDorO": "default", "permissionsType": "custom",
+}
+
 
 def _png_dims(data_url):
     if not isinstance(data_url, str) or ';base64,' not in data_url:
@@ -157,7 +165,7 @@ def _run_build(cid):
     cfg_path = os.path.join(art, 'config.json')
     try:
         # rdgen требует exename; для старых записей без него — имя конфигурации
-        data = json.loads(cfg['config_json'])
+        data = {**RDGEN_FORM_DEFAULTS, **json.loads(cfg['config_json'])}
         data['exename'] = data.get('exename') or cfg['name']
         with open(cfg_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False)
