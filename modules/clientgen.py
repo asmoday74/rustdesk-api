@@ -338,7 +338,13 @@ def start_build(cid):
     except Exception as e:
         return False, 'GitHub API: %s' % e
     if r.status_code not in (200, 204):
-        return False, 'GitHub отклонил запуск сборки (HTTP %s)' % r.status_code
+        details = ''
+        try:
+            details = r.json().get('message', '')
+        except Exception:
+            pass
+        return False, 'GitHub отклонил запуск сборки (HTTP %s)%s' % (
+            r.status_code, ': ' + details if details else '')
 
     run_id = ''
     log_url = ''
