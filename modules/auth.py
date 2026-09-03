@@ -84,7 +84,7 @@ def require_admin(f):
 
 def get_all_users():
     from modules.database import execute_query
-    return execute_query('SELECT id, username, role, email, group_id, created_at, last_login FROM users', fetch_all=True)
+    return execute_query('SELECT id, username, role, email, group_id, auth_source, created_at, last_login FROM users', fetch_all=True)
 
 def create_user(username, password, role='user', email=None, group_id=1):
     from modules.database import execute_query, get_user_by_username
@@ -97,6 +97,11 @@ def create_user(username, password, role='user', email=None, group_id=1):
         INSERT INTO users (username, password_hash, role, email, group_id)
         VALUES (%s, %s, %s, %s, %s)
     """, (username, password_hash, role, email, group_id or 1))
+    if role == 'admin':
+        from modules import groups
+        created = get_user_by_username(username)
+        if created:
+            groups.add_admin_membership(created['id'])
     return True, 'User created'
 
 def delete_user(user_id):

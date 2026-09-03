@@ -39,6 +39,15 @@ services:
       - SECRET_KEY=your-secret-key-change-this-in-production
       # Шаблон оформления: rustdesk (тёмная/светлая схема) или sve (прежний)
       - TEMPLATE=rustdesk
+      # ===== LDAP / Active Directory (доменная аутентификация) =====
+      # Вход по user@domain.name или DOMAIN\User. По умолчанию выключено.
+      # - LDAP_ENABLED=1
+      # - LDAP_SERVER=ldap://dc.domain.name:389      # или ldaps://dc.domain.name:636
+      # - LDAP_BASE_DN=DC=domain,DC=name
+      # - LDAP_BIND_DN=CN=svc_rustdesk,OU=Service,DC=domain,DC=name
+      # - LDAP_BIND_PASSWORD=change-me
+      # - LDAP_USER_FILTER=(|(sAMAccountName={login})(userPrincipalName={login}))
+      # - LDAP_TIMEOUT=10
       # ===== Встроенный генератор кастомных клиентов (GitHub Actions) =====
       # Репозиторий с воркфлоу generator-*.yml (этот репозиторий)
       - GH_USER=your-github-user

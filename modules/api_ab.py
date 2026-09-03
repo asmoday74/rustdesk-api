@@ -4,6 +4,7 @@ import time
 from flask import request, jsonify, session
 
 from modules import ab
+from modules import groups as gr
 from modules.database import execute_query
 from modules.auth import add_audit_log, is_session_expired
 
@@ -289,7 +290,7 @@ def init_ab_routes(app):
         _, uid, cid, err = ab.check_guid(user, guid)
         if err:
             return _error(err)
-        if not ab.check_full_control_privilege(user, uid, cid):
+        if not ab.check_write_privilege(user, uid, cid):
             return _error('NoAccess')
 
         for peer_id in ids:
@@ -410,7 +411,7 @@ def init_ab_routes(app):
         _, uid, cid, err = ab.check_guid(user, guid)
         if err:
             return _error(err)
-        if not ab.check_full_control_privilege(user, uid, cid):
+        if not ab.check_write_privilege(user, uid, cid):
             return _error('NoAccess')
 
         for name in names:
@@ -421,6 +422,10 @@ def init_ab_routes(app):
         return '', 200
 
     # ========== ВЕБ-UI: КОЛЛЕКЦИИ И ПРАВИЛА ==========
+
+    def _can_manage_collection(user, c):
+        """Полные права на коллекцию: владелец, полные права по правилам или админ"""
+        return gr.is_admin_user(user) or ab.check_full_control_privilege(user, c['user_id'], c['id'])
 
     @app.route('/api/web/ab/collections', methods=['GET'])
     def web_ab_collections():
@@ -435,6 +440,7 @@ def init_ab_routes(app):
                 'name': c['name'],
                 'guid': ab.compose_guid(user.get('group_id', 1), user['id'], c['id']),
                 'owner': user['username'],
+                'owner_id': user['id'],
                 'rule': ab.RULE_FULL_CONTROL,
                 'own': True,
             })
@@ -458,6 +464,7 @@ def init_ab_routes(app):
                 'name': c['name'],
                 'guid': ab.compose_guid(owner.get('group_id', 1), owner['id'], c['id']),
                 'owner': owner['username'],
+                'owner_id': owner['id'],
                 'rule': rule['rule'],
                 'own': False,
             })
@@ -484,7 +491,7 @@ def init_ab_routes(app):
         c = ab.collection_info_by_id(collection_id)
         if not c:
             return _error('ItemNotFound', 404)
-        if c['user_id'] != user['id'] and user.get('role') != 'admin':
+        if not _can_manage_collection(user, c):
             return _error('NoAccess', 403)
         body = _parse_json_body()
         name = (body or {}).get('name', '').strip()
@@ -501,11 +508,33 @@ def init_ab_routes(app):
         c = ab.collection_info_by_id(collection_id)
         if not c:
             return _error('ItemNotFound', 404)
-        if c['user_id'] != user['id'] and user.get('role') != 'admin':
+        if not _can_manage_collection(user, c):
             return _error('NoAccess', 403)
         ab.delete_collection(collection_id)
         add_audit_log(user['id'], 'AB_DELETE_COLLECTION', str(collection_id), 'Address book collection deleted', request.remote_addr)
         return jsonify({'message': 'Collection deleted'})
+
+    @app.route('/api/web/ab/collections/<int:collection_id>/owner', methods=['PUT'])
+    def web_ab_collection_change_owner(collection_id):
+        user = get_auth_user()
+        if not user:
+            return _error('Unauthorized', 401)
+        c = ab.collection_info_by_id(collection_id)
+        if not c:
+            return _error('ItemNotFound', 404)
+        if not _can_manage_collection(user, c):
+            return _error('NoAccess', 403)
+        body = _parse_json_body() or {}
+        new_owner_id = body.get('user_id')
+        new_owner = execute_query('SELECT * FROM users WHERE id = %s', (new_owner_id,), fetch_one=True)
+        if not new_owner:
+            return _error('ItemNotFound')
+        execute_query(
+            'UPDATE address_book_collections SET user_id = %s, updated_at = NOW() WHERE id = %s',
+            (new_owner_id, collection_id))
+        add_audit_log(user['id'], 'AB_CHANGE_OWNER', str(collection_id),
+                      f'Collection owner changed to {new_owner["username"]}', request.remote_addr)
+        return jsonify({'message': 'Owner changed'})
 
     @app.route('/api/web/ab/rules/<int:collection_id>', methods=['GET'])
     def web_ab_rules(collection_id):
@@ -515,7 +544,7 @@ def init_ab_routes(app):
         c = ab.collection_info_by_id(collection_id)
         if not c:
             return _error('ItemNotFound', 404)
-        if c['user_id'] != user['id'] and user.get('role') != 'admin':
+        if not _can_manage_collection(user, c):
             return _error('NoAccess', 403)
 
         res = []
@@ -525,7 +554,7 @@ def init_ab_routes(app):
                 u = execute_query('SELECT username FROM users WHERE id = %s', (r['to_id'],), fetch_one=True)
                 target_name = u['username'] if u else ''
             else:
-                g = ab.group_info_by_id(r['to_id'])
+                g = gr.group_info_by_id(r['to_id'])
                 target_name = g['name'] if g else f"Группа {r['to_id']}"
             res.append({
                 'id': r['id'],
@@ -554,12 +583,15 @@ def init_ab_routes(app):
         c = ab.collection_info_by_id(collection_id)
         if not c:
             return _error('ItemNotFound', 404)
-        if c['user_id'] != user['id'] and user.get('role') != 'admin':
+        if not _can_manage_collection(user, c):
             return _error('NoAccess', 403)
 
         if rule_type == ab.RULE_TYPE_PERSONAL:
             target = execute_query('SELECT id FROM users WHERE id = %s', (to_id,), fetch_one=True)
             if not target:
+                return _error('ItemNotFound')
+        else:
+            if not gr.group_info_by_id(to_id):
                 return _error('ItemNotFound')
 
         existing = execute_query("""
@@ -581,18 +613,19 @@ def init_ab_routes(app):
         if not r:
             return _error('ItemNotFound', 404)
         c = ab.collection_info_by_id(r['collection_id'])
-        if not c or (c['user_id'] != user['id'] and user.get('role') != 'admin'):
+        if not c or not _can_manage_collection(user, c):
             return _error('NoAccess', 403)
         ab.delete_rule(rule_id)
         return jsonify({'message': 'Rule deleted'})
 
     @app.route('/api/web/ab/users', methods=['GET'])
     def web_ab_users():
-        """Пользователи группы для настройки общего доступа"""
+        """Пользователи для настройки общего доступа"""
         user = get_auth_user()
         if not user:
             return _error('Unauthorized', 401)
-        users = ab.list_users_by_group(user.get('group_id', 1))
+        users = execute_query(
+            'SELECT id, username FROM users ORDER BY username', fetch_all=True) or []
         return jsonify([{'id': u['id'], 'username': u['username']} for u in users])
 
     # ========== ВЕБ-UI: ГРУППЫ ПОЛЬЗОВАТЕЛЕЙ ==========
@@ -602,71 +635,151 @@ def init_ab_routes(app):
         user = get_auth_user()
         if not user:
             return _error('Unauthorized', 401)
-        groups = ab.list_groups()
         return jsonify([{
             'id': g['id'], 'name': g['name'], 'type': g['type'],
-        } for g in groups])
+            'source': g.get('source') or 'local', 'note': g.get('note') or '',
+            'builtin': g.get('builtin') or 0,
+            'members': gr.member_names(g['id']),
+        } for g in gr.list_groups()])
 
     @app.route('/api/web/groups', methods=['POST'])
     def web_group_create():
         user = get_auth_user()
-        if not user or user.get('role') != 'admin':
+        if not user or not gr.is_admin_user(user):
             return _error('NoAccess', 403)
         body = _parse_json_body() or {}
         name = (body.get('name') or '').strip()
-        gtype = body.get('type', ab.GROUP_TYPE_DEFAULT)
+        note = (body.get('note') or '').strip()
+        gtype = body.get('type', gr.GROUP_TYPE_DEFAULT)
         if not name:
             return _error('ParamsError')
-        if gtype not in (ab.GROUP_TYPE_DEFAULT, ab.GROUP_TYPE_SHARE):
+        if gtype not in (gr.GROUP_TYPE_DEFAULT, gr.GROUP_TYPE_SHARE):
             return _error('ParamsError')
-        gid = ab.create_group(name, gtype)
+        if gr.group_name_exists(name):
+            return _error('GroupNameExists')
+        gid = gr.create_group(name, note=note, group_type=gtype)
         add_audit_log(user['id'], 'CREATE_GROUP', name, 'Group created', request.remote_addr)
         return jsonify({'message': 'Group created', 'id': gid}), 201
 
     @app.route('/api/web/groups/<int:group_id>', methods=['PUT'])
     def web_group_update(group_id):
         user = get_auth_user()
-        if not user or user.get('role') != 'admin':
+        if not user or not gr.is_admin_user(user):
             return _error('NoAccess', 403)
-        g = ab.group_info_by_id(group_id)
+        g = gr.group_info_by_id(group_id)
         if not g:
             return _error('ItemNotFound', 404)
         body = _parse_json_body() or {}
         name = body.get('name')
+        note = body.get('note')
         gtype = body.get('type')
-        if name is not None and not str(name).strip():
+        if name is not None:
+            name = str(name).strip()
+            if not name or gr.group_name_exists(name, exclude_id=group_id):
+                return _error('ParamsError' if not name else 'GroupNameExists')
+        if gtype is not None and gtype not in (gr.GROUP_TYPE_DEFAULT, gr.GROUP_TYPE_SHARE):
             return _error('ParamsError')
-        if gtype is not None and gtype not in (ab.GROUP_TYPE_DEFAULT, ab.GROUP_TYPE_SHARE):
-            return _error('ParamsError')
-        ab.update_group(group_id, name=str(name).strip() if name is not None else None, group_type=gtype)
+        gr.update_group(group_id, name=name, note=str(note).strip() if note is not None else None,
+                        group_type=gtype)
         return jsonify({'message': 'Group updated'})
 
     @app.route('/api/web/groups/<int:group_id>', methods=['DELETE'])
     def web_group_delete(group_id):
         user = get_auth_user()
-        if not user or user.get('role') != 'admin':
+        if not user or not gr.is_admin_user(user):
             return _error('NoAccess', 403)
-        if group_id == 1:
-            return _error('Cannot delete default group')
-        g = ab.group_info_by_id(group_id)
+        g = gr.group_info_by_id(group_id)
         if not g:
             return _error('ItemNotFound', 404)
-        ab.delete_group(group_id)
+        if g.get('builtin', 0) != gr.BUILTIN_NONE or group_id == 1:
+            return _error('Cannot delete builtin group')
+        gr.delete_group(group_id)
         add_audit_log(user['id'], 'DELETE_GROUP', g['name'], 'Group deleted', request.remote_addr)
         return jsonify({'message': 'Group deleted'})
 
+    @app.route('/api/web/groups/<int:group_id>/members', methods=['GET'])
+    def web_group_members(group_id):
+        user = get_auth_user()
+        if not user or not gr.is_admin_user(user):
+            return _error('NoAccess', 403)
+        if not gr.group_info_by_id(group_id):
+            return _error('ItemNotFound', 404)
+        return jsonify(gr.list_members(group_id))
+
+    @app.route('/api/web/groups/<int:group_id>/members', methods=['POST'])
+    def web_group_member_add(group_id):
+        user = get_auth_user()
+        if not user or not gr.is_admin_user(user):
+            return _error('NoAccess', 403)
+        body = _parse_json_body() or {}
+        ok, err = gr.add_member(group_id, body.get('member_type'), body.get('member_id'))
+        if not ok:
+            code = 404 if err in ('GroupNotFound', 'UserNotFound') else 400
+            return _error(err or 'ParamsError', code)
+        return jsonify({'message': 'Member added'})
+
+    @app.route('/api/web/groups/<int:group_id>/members', methods=['DELETE'])
+    def web_group_member_remove(group_id):
+        user = get_auth_user()
+        if not user or not gr.is_admin_user(user):
+            return _error('NoAccess', 403)
+        body = _parse_json_body() or {}
+        if body.get('member_type') not in (gr.MEMBER_USER, gr.MEMBER_GROUP) or not body.get('member_id'):
+            return _error('ParamsError')
+        gr.remove_member(group_id, body['member_type'], body['member_id'])
+        return jsonify({'message': 'Member removed'})
+
+    @app.route('/api/web/groups/ad', methods=['POST'])
+    def web_group_add_ad():
+        """Добавить группу из AD (результат поиска в каталоге)"""
+        user = get_auth_user()
+        if not user or not gr.is_admin_user(user):
+            return _error('NoAccess', 403)
+        body = _parse_json_body() or {}
+        name = (body.get('name') or '').strip()
+        dn = (body.get('dn') or '').strip()
+        sid = (body.get('sid') or '').strip()
+        if not name or not dn:
+            return _error('ParamsError')
+        existing = execute_query(
+            'SELECT id FROM groups WHERE source = %s AND ldap_dn = %s',
+            (gr.GROUP_SOURCE_AD, dn), fetch_one=True)
+        if existing:
+            return _error('GroupAlreadyAdded')
+        if gr.group_name_exists(name):
+            return _error('GroupNameExists')
+        gid = gr.create_group(name, source=gr.GROUP_SOURCE_AD, ldap_dn=dn, ldap_sid=sid)
+        add_audit_log(user['id'], 'ADD_AD_GROUP', name, f'AD group added (dn={dn})', request.remote_addr)
+        return jsonify({'message': 'AD group added', 'id': gid}), 201
+
+    @app.route('/api/web/ad/groups', methods=['GET'])
+    def web_ad_group_search():
+        """Поиск групп в каталоге AD для добавления в систему"""
+        user = get_auth_user()
+        if not user or not gr.is_admin_user(user):
+            return _error('NoAccess', 403)
+        from modules import ldap_auth
+        if not ldap_auth.is_enabled():
+            return _error('LDAPNotConfigured')
+        found = ldap_auth.search_groups(request.args.get('search', ''))
+        if found is None:
+            return _error('LDAPError', 500)
+        # Исключаем уже добавленные в систему группы
+        added = {g['ldap_dn'] for g in gr.list_groups() if g.get('ldap_dn')}
+        return jsonify([g for g in found if g['dn'] not in added])
+
     @app.route('/api/web/users/<int:user_id>/group', methods=['PUT'])
     def web_user_set_group(user_id):
-        """Назначить пользователю группу"""
+        """Назначить пользователю первичную группу"""
         user = get_auth_user()
-        if not user or user.get('role') != 'admin':
+        if not user or not gr.is_admin_user(user):
             return _error('NoAccess', 403)
         target = execute_query('SELECT id FROM users WHERE id = %s', (user_id,), fetch_one=True)
         if not target:
             return _error('ItemNotFound', 404)
         body = _parse_json_body() or {}
         group_id = body.get('group_id')
-        if not group_id or not ab.group_info_by_id(group_id):
+        if not group_id or not gr.group_info_by_id(group_id):
             return _error('ParamsError')
         ab.set_user_group(user_id, group_id)
         return jsonify({'message': 'User group updated'})
@@ -680,7 +793,7 @@ def init_ab_routes(app):
     @app.route('/api/web/audit/conn', methods=['GET'])
     def web_audit_conn():
         user = get_auth_user()
-        if not user or user.get('role') != 'admin':
+        if not user or not gr.is_admin_user(user):
             return _error('NoAccess', 403)
         page, psz, off = _audit_page()
         total = execute_query(
@@ -696,7 +809,7 @@ def init_ab_routes(app):
     @app.route('/api/web/audit/file', methods=['GET'])
     def web_audit_file():
         user = get_auth_user()
-        if not user or user.get('role') != 'admin':
+        if not user or not gr.is_admin_user(user):
             return _error('NoAccess', 403)
         page, psz, off = _audit_page()
         total = execute_query(

@@ -219,6 +219,9 @@ def init_db():
         cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS group_id INTEGER DEFAULT 1")
         cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS status INTEGER DEFAULT 1")
         cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''")
+        # LDAP: источник аутентификации (local/ldap) и DN пользователя в каталоге
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_source TEXT DEFAULT 'local'")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS ldap_dn TEXT DEFAULT ''")
 
         # Таблица групп пользователей (совместимость с rustdesk-server-pro)
         # type: 1 = обычная (участник видит только себя), 2 = общая (участники видят друг друга)
@@ -229,6 +232,26 @@ def init_db():
                 type INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        # Миграция групп: источник (локальная/AD), атрибуты каталога, комментарий,
+        # признак встроенной группы (0 = обычная, 1 = Users, 2 = Administrators)
+        cursor.execute("ALTER TABLE groups ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'local'")
+        cursor.execute("ALTER TABLE groups ADD COLUMN IF NOT EXISTS ldap_dn TEXT DEFAULT ''")
+        cursor.execute("ALTER TABLE groups ADD COLUMN IF NOT EXISTS ldap_sid TEXT DEFAULT ''")
+        cursor.execute("ALTER TABLE groups ADD COLUMN IF NOT EXISTS note TEXT DEFAULT ''")
+        cursor.execute("ALTER TABLE groups ADD COLUMN IF NOT EXISTS builtin INTEGER DEFAULT 0")
+
+        # Членство в группах: пользователи и вложенные группы (многие-ко-многим)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS group_members (
+                id SERIAL PRIMARY KEY,
+                group_id INTEGER NOT NULL,
+                member_type TEXT NOT NULL DEFAULT 'user',
+                member_id INTEGER NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE (group_id, member_type, member_id)
             )
         """)
 
@@ -384,6 +407,8 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rda_device_conn ON rustdesk_audits(device_id, conn_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rda_nonce ON rustdesk_audits(nonce)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_rda_created ON rustdesk_audits(created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_gm_group_id ON group_members(group_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_gm_member ON group_members(member_type, member_id)")
 
         conn.commit()
         release_db_connection(conn)
@@ -412,6 +437,37 @@ def init_db():
                 VALUES (%s, %s, 'admin', 1)
             """, ('admin', admin_password))
             db_logger.info("Created default admin user: admin / admin")
+
+        # Встроенные локальные группы: Users (пустая) и Administrators.
+        # Administrators включает всех пользователей с ролью admin и группу Users.
+        users_group = execute_query('SELECT id FROM groups WHERE builtin = 1', fetch_one=True)
+        if not users_group:
+            execute_query(
+                "INSERT INTO groups (name, type, source, builtin) VALUES ('Users', 1, 'local', 1)")
+            users_group = execute_query('SELECT id FROM groups WHERE builtin = 1', fetch_one=True)
+            db_logger.info("Created builtin group Users")
+        admins_group = execute_query('SELECT id FROM groups WHERE builtin = 2', fetch_one=True)
+        if not admins_group:
+            execute_query(
+                "INSERT INTO groups (name, type, source, builtin) VALUES ('Administrators', 1, 'local', 2)")
+            admins_group = execute_query('SELECT id FROM groups WHERE builtin = 2', fetch_one=True)
+            db_logger.info("Created builtin group Administrators")
+        if users_group and admins_group:
+            for a in execute_query("SELECT id FROM users WHERE role = 'admin'", fetch_all=True) or []:
+                execute_query("""
+                    INSERT INTO group_members (group_id, member_type, member_id)
+                    SELECT %s, 'user', %s WHERE NOT EXISTS (
+                        SELECT 1 FROM group_members
+                        WHERE group_id = %s AND member_type = 'user' AND member_id = %s
+                    )
+                """, (admins_group['id'], a['id'], admins_group['id'], a['id']))
+            execute_query("""
+                INSERT INTO group_members (group_id, member_type, member_id)
+                SELECT %s, 'group', %s WHERE NOT EXISTS (
+                    SELECT 1 FROM group_members
+                    WHERE group_id = %s AND member_type = 'group' AND member_id = %s
+                )
+            """, (admins_group['id'], users_group['id'], admins_group['id'], users_group['id']))
 
         return True
     except Exception as e:
@@ -543,21 +599,34 @@ def update_heartbeat(uuid, client_ip, conns=None, modified_at=None, computer_id=
         db_logger.error(f"Error updating heartbeat: {e}")
         return False, None
 
-def get_all_computers():
+def get_all_computers(user_id=None):
+    if user_id is not None:
+        return execute_query(
+            'SELECT * FROM computers WHERE user_id = %s ORDER BY last_update_timestamp DESC',
+            (user_id,), fetch_all=True
+        )
     return execute_query(
         'SELECT * FROM computers ORDER BY last_update_timestamp DESC',
         fetch_all=True
     )
 
-def get_stats():
-    result = execute_query('SELECT COUNT(*) as total FROM computers', fetch_one=True)
-    total = result['total'] if result else 0
-    
-    result = execute_query("""
-        SELECT COUNT(*) as online FROM computers 
-        WHERE last_online_timestamp > EXTRACT(EPOCH FROM NOW())::INTEGER - 35
-    """, fetch_one=True)
-    online = result['online'] if result else 0
+def get_stats(user_id=None):
+    if user_id is not None:
+        result = execute_query('SELECT COUNT(*) as total FROM computers WHERE user_id = %s', (user_id,), fetch_one=True)
+        total = result['total'] if result else 0
+        result = execute_query("""
+            SELECT COUNT(*) as online FROM computers 
+            WHERE user_id = %s AND last_online_timestamp > EXTRACT(EPOCH FROM NOW())::INTEGER - 35
+        """, (user_id,), fetch_one=True)
+        online = result['online'] if result else 0
+    else:
+        result = execute_query('SELECT COUNT(*) as total FROM computers', fetch_one=True)
+        total = result['total'] if result else 0
+        result = execute_query("""
+            SELECT COUNT(*) as online FROM computers 
+            WHERE last_online_timestamp > EXTRACT(EPOCH FROM NOW())::INTEGER - 35
+        """, fetch_one=True)
+        online = result['online'] if result else 0
     
     return {
         'total_computers': total,
@@ -575,7 +644,7 @@ def get_user_by_username(username):
 
 def get_all_users():
     return execute_query(
-        'SELECT id, username, role, email, group_id, created_at, last_login FROM users',
+        'SELECT id, username, role, email, group_id, auth_source, created_at, last_login FROM users',
         fetch_all=True
     )
 

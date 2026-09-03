@@ -13,7 +13,7 @@
             <select id="abSelector" class="search-type-select" onchange="onAbSelected()"><option value="" data-i18n="loading">Загрузка...</option></select>
             <button class="btn btn-primary" id="addPeerBtn" onclick="openPeerModal()"><i class="fas fa-plus"></i> <span data-i18n="add">Добавить</span></button>
             <button class="btn btn-ghost" onclick="openTagsModal()"><i class="fas fa-tags"></i> <span data-i18n="tags">Теги</span></button>
-            <button class="btn btn-ghost" onclick="openCollectionsModal()"><i class="fas fa-folder"></i> <span data-i18n="shared_books">Коллекции</span></button>
+            <button class="btn btn-ghost" onclick="openCollectionsTab()"><i class="fas fa-folder"></i> <span data-i18n="shared_books">Коллекции</span></button>
             <button class="btn btn-ghost" onclick="loadAll()"><i class="fas fa-sync-alt"></i></button>
         </div>
     </div>
@@ -47,18 +47,23 @@
 <div class="panel">
     <div class="panel-head">
         <h3 data-i18n="tab_collections">Коллекции</h3>
-        <button class="btn btn-primary" id="addGroupBtn"><i class="fas fa-plus"></i> <span data-i18n="add_collection">Добавить коллекцию</span></button>
     </div>
-    <div class="table-wrapper">
-        <table class="computers-table">
-            <thead><tr>
-                <th>ID</th>
-                <th data-i18n="col_name">Название</th>
-                <th data-i18n="col_type">Тип</th>
-                <th data-i18n="col_actions">Действия</th>
-            </tr></thead>
-            <tbody id="groupsTableBody"><tr><td colspan="4" class="empty-state" data-i18n="loading">Загрузка...</td></tr></tbody>
-        </table>
+    <div class="panel-body">
+        <form onsubmit="createCollection(event)" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:200px;margin:0;"><label data-i18n="new_shared_book">Новая общая книга</label><input type="text" id="newCollectionName" required></div>
+            <button type="submit" class="btn btn-primary" data-i18n="create">Создать</button>
+        </form>
+        <div class="table-wrapper">
+            <table class="computers-table">
+                <thead><tr>
+                    <th data-i18n="col_name">Название</th>
+                    <th data-i18n="col_owner">Владелец</th>
+                    <th data-i18n="col_my_rights">Мои права</th>
+                    <th data-i18n="col_actions">Действия</th>
+                </tr></thead>
+                <tbody id="collectionsTableBody"><tr><td colspan="4" class="empty-state" data-i18n="loading">Загрузка...</td></tr></tbody>
+            </table>
+        </div>
     </div>
 </div>
 </section>
@@ -91,35 +96,22 @@
     </form>
 </div></div>
 
-<!-- Модалка коллекций (общие книги) -->
-<div id="collectionsModal" class="modal"><div class="modal-content">
-    <div class="modal-header"><h3 data-i18n="shared_books_title">Общие адресные книги</h3><button class="close" onclick="closeModal('collectionsModal')">&times;</button></div>
-    <div id="collectionsList"></div>
-    <form onsubmit="createCollection(event)" style="display:flex;gap:8px;align-items:flex-end;margin-top:12px;">
-        <div class="form-group" style="flex:1;margin:0;"><label data-i18n="new_shared_book">Новая общая книга</label><input type="text" id="newCollectionName" required></div>
-        <button type="submit" class="btn btn-primary" data-i18n="create">Создать</button>
-    </form>
-</div></div>
-
 <!-- Модалка шаринга -->
 <div id="shareModal" class="modal"><div class="modal-content">
     <div class="modal-header"><h3 id="shareModalTitle" data-i18n="share_title">Общий доступ</h3><button class="close" onclick="closeModal('shareModal')">&times;</button></div>
+    <div id="ownerChangeBlock" style="display:none;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;margin-bottom:12px;">
+        <label data-i18n="col_owner" style="font-size:.82rem;">Владелец</label>
+        <div class="add-member-row" style="margin-top:4px;">
+            <select id="ownerSelect"></select>
+            <button type="button" class="btn btn-warn btn-sm" onclick="changeOwner()"><i class="fas fa-user-check"></i> <span data-i18n="change_owner">Сменить владельца</span></button>
+        </div>
+    </div>
     <div id="rulesList"></div>
     <form onsubmit="saveRule(event)" style="display:flex;gap:8px;align-items:flex-end;margin-top:12px;flex-wrap:wrap;">
         <div class="form-group" style="margin:0;"><label data-i18n="share_to">Кому</label><select id="ruleType" onchange="onRuleTypeChange()"><option value="1" data-i18n="user_label">Пользователь</option><option value="2" data-i18n="group">Группа</option></select></div>
         <div class="form-group" style="margin:0;"><label id="ruleTargetLabel" data-i18n="user_label">Пользователь</label><select id="ruleUser" required></select></div>
         <div class="form-group" style="margin:0;"><label data-i18n="share_rights">Права</label><select id="ruleLevel"><option value="1" data-i18n="rule_read">Чтение</option><option value="2" data-i18n="rule_readwrite">Чтение и запись</option><option value="3" data-i18n="rule_full">Полный доступ</option></select></div>
         <button type="submit" class="btn btn-primary" data-i18n="grant">Предоставить</button>
-    </form>
-</div></div>
-
-<!-- Модалка коллекции (группы пользователей) -->
-<div id="groupModal" class="modal"><div class="modal-content">
-    <div class="modal-header"><h3 id="groupModalTitle" data-i18n="add_collection">Добавить коллекцию</h3><button class="close close-group-modal">&times;</button></div>
-    <form id="groupForm">
-        <div class="form-group"><label><span data-i18n="col_name">Название</span> *</label><input type="text" id="groupName" required></div>
-        <div class="form-group"><label data-i18n="col_type">Тип</label><select id="groupType"><option value="1" data-i18n="group_type_default">Обычная (участник видит только себя)</option><option value="2" data-i18n="group_type_shared">Общая (видят устройства друг друга)</option></select></div>
-        <button type="submit" class="btn btn-primary" data-i18n="save">Сохранить</button>
     </form>
 </div></div>
 

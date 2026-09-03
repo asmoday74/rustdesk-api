@@ -22,10 +22,6 @@ RULE_TYPE_GROUP = 2
 
 STATUS_ENABLE = 1
 
-# Типы групп (совместимость с rustdesk-server-pro)
-GROUP_TYPE_DEFAULT = 1  # участник видит только себя
-GROUP_TYPE_SHARE = 2    # участники видят устройства друг друга
-
 
 # ========== ТОКЕНЫ КЛИЕНТОВ ==========
 def token_expire_timestamp():
@@ -141,6 +137,7 @@ def personal_guid(user):
 def user_max_rule(user, uid, cid):
     if user['id'] == uid:
         return RULE_FULL_CONTROL
+    from modules import groups as gr
     max_rule = 0
     personal_rule = execute_query("""
         SELECT * FROM address_book_collection_rules
@@ -152,13 +149,20 @@ def user_max_rule(user, uid, cid):
         if max_rule == RULE_FULL_CONTROL:
             return max_rule
 
-    group_rule = execute_query("""
-        SELECT * FROM address_book_collection_rules
-        WHERE type = %s AND collection_id = %s AND to_id = %s
-        LIMIT 1
-    """, (RULE_TYPE_GROUP, cid, user.get('group_id', 1)), fetch_one=True)
-    if group_rule and group_rule['rule'] > max_rule:
-        max_rule = group_rule['rule']
+    # Групповые правила: учитываем все эффективные группы пользователя
+    # (прямое членство + транзитивно вложенные группы)
+    eff_groups = gr.user_effective_group_ids(user['id'])
+    if eff_groups:
+        placeholders = ','.join(['%s'] * len(eff_groups))
+        group_rules = execute_query(f"""
+            SELECT * FROM address_book_collection_rules
+            WHERE type = %s AND collection_id = %s AND to_id IN ({placeholders})
+        """, (RULE_TYPE_GROUP, cid, *eff_groups), fetch_all=True) or []
+        for group_rule in group_rules:
+            if group_rule['rule'] > max_rule:
+                max_rule = group_rule['rule']
+                if max_rule == RULE_FULL_CONTROL:
+                    return max_rule
     return max_rule
 
 
@@ -176,14 +180,19 @@ def check_full_control_privilege(user, uid, cid):
 
 def collection_read_rules(user):
     """Правила, по которым пользователь может читать чужие коллекции"""
+    from modules import groups as gr
     personal_rules = execute_query("""
         SELECT * FROM address_book_collection_rules
         WHERE type = %s AND to_id = %s AND rule > 0
     """, (RULE_TYPE_PERSONAL, user['id']), fetch_all=True) or []
-    group_rules = execute_query("""
-        SELECT * FROM address_book_collection_rules
-        WHERE type = %s AND to_id = %s AND rule > 0
-    """, (RULE_TYPE_GROUP, user.get('group_id', 1)), fetch_all=True) or []
+    eff_groups = gr.user_effective_group_ids(user['id'])
+    group_rules = []
+    if eff_groups:
+        placeholders = ','.join(['%s'] * len(eff_groups))
+        group_rules = execute_query(f"""
+            SELECT * FROM address_book_collection_rules
+            WHERE type = %s AND to_id IN ({placeholders}) AND rule > 0
+        """, (RULE_TYPE_GROUP, *eff_groups), fetch_all=True) or []
     return personal_rules + group_rules
 
 
@@ -268,13 +277,14 @@ def tag_to_payload(row):
 
 
 def user_payload(user):
+    from modules import groups
     return {
         'name': user['username'],
         'display_name': user.get('nickname') or user['username'],
         'avatar': '',
         'email': user.get('email') or '',
         'note': '',
-        'is_admin': user.get('role') == 'admin',
+        'is_admin': groups.is_admin_user(user),
         'status': user.get('status', STATUS_ENABLE),
         'info': {},
     }
@@ -601,64 +611,13 @@ def list_users_by_group(group_id):
     """, (group_id,), fetch_all=True) or []
 
 
-# ========== ГРУППЫ ==========
-def list_groups():
-    return execute_query('SELECT * FROM groups ORDER BY id', fetch_all=True) or []
-
-
-def group_info_by_id(group_id):
-    if not group_id:
-        return None
-    return execute_query(
-        'SELECT * FROM groups WHERE id = %s', (group_id,), fetch_one=True
-    )
-
-
-def create_group(name, group_type=GROUP_TYPE_DEFAULT):
-    execute_query("""
-        INSERT INTO groups (name, type, updated_at) VALUES (%s, %s, NOW())
-    """, (name, group_type))
-    row = execute_query(
-        'SELECT id FROM groups WHERE name = %s ORDER BY id DESC', (name,), fetch_one=True
-    )
-    return row['id'] if row else None
-
-
-def update_group(group_id, name=None, group_type=None):
-    sets, params = [], []
-    if name is not None:
-        sets.append('name = %s')
-        params.append(name)
-    if group_type is not None:
-        sets.append('type = %s')
-        params.append(group_type)
-    if not sets:
-        return
-    sets.append('updated_at = NOW()')
-    params.append(group_id)
-    execute_query(f"UPDATE groups SET {', '.join(sets)} WHERE id = %s", tuple(params))
-
-
-def delete_group(group_id):
-    """Удаляет группу; её пользователи и устройства переходят в группу 1"""
-    if group_id == 1:
-        return False
-    execute_query('UPDATE users SET group_id = 1 WHERE group_id = %s', (group_id,))
-    execute_query('UPDATE computers SET group_id = 1 WHERE group_id = %s', (group_id,))
-    execute_query(
-        'DELETE FROM address_book_collection_rules WHERE type = %s AND to_id = %s',
-        (RULE_TYPE_GROUP, group_id)
-    )
-    execute_query('DELETE FROM groups WHERE id = %s', (group_id,))
-    return True
-
-
 def can_see_group_members(user):
     """Админ или участник общей группы видит всех участников группы"""
-    if user.get('role') == 'admin':
+    from modules import groups
+    if groups.is_admin_user(user):
         return True
-    group = group_info_by_id(user.get('group_id', 1))
-    return bool(group and group.get('type') == GROUP_TYPE_SHARE)
+    group = groups.group_info_by_id(user.get('group_id', 1))
+    return bool(group and group.get('type') == groups.GROUP_TYPE_SHARE)
 
 
 def set_user_group(user_id, group_id):

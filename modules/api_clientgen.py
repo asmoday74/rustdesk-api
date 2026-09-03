@@ -4,6 +4,7 @@ import os
 from flask import request, jsonify, send_file
 
 from modules import clientgen
+from modules import groups as gr
 from modules.api_ab import get_auth_user, _error
 
 
@@ -11,7 +12,7 @@ def _admin():
     user = get_auth_user()
     if not user:
         return None, (_error('Unauthorized', 401))
-    if user.get('role') != 'admin':
+    if not gr.is_admin_user(user):
         return None, (_error('NoAccess', 403))
     return user, None
 

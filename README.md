@@ -23,10 +23,18 @@
 - **Списки устройств** — адресные книги клиентов RustDesk:
   - вкладка **«Адресная книга»**: личные и общие адресные книги, записи,
     теги с цветами, правила доступа (чтение / чтение и запись / полный доступ);
-  - вкладка **«Коллекции»**: коллекции (группы) пользователей — обычные и
-    общие, как в rustdesk-server-pro.
+  - вкладка **«Коллекции»**: общие адресные книги с владельцем и правами
+    (чтение / чтение и запись / полный доступ) для пользователей и групп,
+    смена владельца.
 - **Пользователи** — создание/удаление, роли (администратор/пользователь),
   смена пароля, назначение группы.
+- **Группы** — локальные и группы из Active Directory, вложенность
+  (группа включает пользователей и другие группы), комментарий; встроенные
+  группы Users и Administrators (членство в Administrators даёт доступ к
+  админ-панели).
+- **Доменная аутентификация (LDAP/AD)** — вход в веб-консоль и клиент по
+  `user@domain.name` или `DOMAIN\User`; автопровижининг доменных
+  пользователей, синхронизация членства в AD-группах.
 - **Аудит безопасности** — журнал соединений и передачи файлов клиентов
   (с пагинацией).
 - **Создание клиента** — встроенный генератор кастомных клиентов RustDesk
@@ -65,10 +73,17 @@ fully compatible with RustDesk 1.4.x clients.
 - **Device lists** — RustDesk client address books:
   - **Address book** tab: personal and shared address books, records,
     colored tags, access rules (read / read-write / full access);
-  - **Collections** tab: user collections (groups) — default and shared,
-    like in rustdesk-server-pro.
+  - **Collections** tab: shared address books with an owner and access
+    rights (read / read-write / full access) granted to users and groups,
+    owner transfer.
 - **Users** — create/delete, roles (admin/user), password change,
   group assignment.
+- **Groups** — local groups and Active Directory groups, nesting (a group
+  can contain users and other groups), a comment field; built-in Users and
+  Administrators groups (Administrators membership grants the admin panel).
+- **Domain authentication (LDAP/AD)** — sign in to the web portal and the
+  client with `user@domain.name` or `DOMAIN\User`; automatic provisioning
+  of domain users and AD group membership sync.
 - **Security audit** — connection and file transfer logs (paginated).
 - **Client generation** — built-in custom RustDesk client generator
   (ported from [rdgen](https://github.com/bryangerlach/rdgen)): a

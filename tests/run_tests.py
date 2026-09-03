@@ -394,7 +394,9 @@ r = client.post('/api/web/groups', json={'name': 'ИТ-отдел', 'type': 2})
 check('group create (shared)', r.status_code == 201)
 grp_shared = r.get_json()['id']
 r = client.get('/api/web/groups')
-check('groups list (Default + 2)', r.status_code == 200 and len(r.get_json()) == 3)
+gnames = {g['name'] for g in r.get_json()}
+check('groups list (builtin + Default + 2)', r.status_code == 200 and len(r.get_json()) == 5
+      and {'Users', 'Administrators', 'Бухгалтерия', 'ИТ-отдел'} <= gnames)
 r = client.post('/api/web/groups', json={'name': 'Bad', 'type': 9})
 check('group invalid type rejected', r.status_code == 400)
 
@@ -562,5 +564,187 @@ r2 = flask_app.test_client()
 r2.post('/api/login', json={'username': 'user2', 'password': 'pass1234'})
 r = r2.get('/clientgen')
 check('/clientgen denied for non-admin', r.status_code in (302, 403))
+
+# ================= ГРУППЫ: ВСТРОЕННЫЕ, ЧЛЕНСТВО, ИЕРАРХИЯ =================
+print('== groups: builtin, membership, hierarchy ==')
+groups_list = anon.get('/api/web/groups').get_json()
+users_gid = [g for g in groups_list if g['builtin'] == 1][0]['id']
+admins_gid = [g for g in groups_list if g['builtin'] == 2][0]['id']
+admins_row = [g for g in groups_list if g['id'] == admins_gid][0]
+check('builtin Users/Administrators exist', users_gid and admins_gid)
+check('Administrators contains Users group', 'Users' in admins_row['members'])
+check('admin user in Administrators', 'admin' in admins_row['members'])
+r = anon.delete(f'/api/web/groups/{users_gid}')
+check('builtin Users delete denied', r.status_code == 400)
+r = anon.delete(f'/api/web/groups/{admins_gid}')
+check('builtin Administrators delete denied', r.status_code == 400)
+
+r = anon.post('/api/web/groups', json={'name': 'Менеджеры', 'note': 'менеджерский состав'})
+check('group create (note)', r.status_code == 201)
+gid_m = r.get_json()['id']
+r = anon.post('/api/web/groups', json={'name': 'Дирекция'})
+check('group create (container)', r.status_code == 201)
+gid_d = r.get_json()['id']
+r = anon.post('/api/web/groups', json={'name': 'Дирекция'})
+check('duplicate group name rejected', r.status_code == 400)
+
+r = anon.post(f'/api/web/groups/{gid_m}/members', json={'member_type': 'user', 'member_id': carol_id})
+check('add user to group', r.status_code == 200)
+r = anon.post(f'/api/web/groups/{gid_d}/members', json={'member_type': 'group', 'member_id': gid_m})
+check('add nested group', r.status_code == 200)
+r = anon.post(f'/api/web/groups/{gid_m}/members', json={'member_type': 'group', 'member_id': gid_d})
+check('membership cycle rejected', r.status_code == 400)
+r = anon.post(f'/api/web/groups/{gid_m}/members', json={'member_type': 'group', 'member_id': gid_m})
+check('self-nesting rejected', r.status_code == 400)
+members = anon.get(f'/api/web/groups/{gid_m}/members').get_json()
+check('members list', any(u['id'] == carol_id for u in members['users']))
+r = anon.put(f'/api/web/groups/{gid_m}', json={'note': 'обновлённый комментарий'})
+check('group note update', r.status_code == 200)
+
+# Иерархия прав: коллекция, выданная подгруппе, видна участникам контейнера
+r = anon.post('/api/web/ab/collections', json={'name': 'Иерархия'})
+check('hierarchy collection created', r.status_code == 201)
+col_h = [c for c in anon.get('/api/web/ab/collections').get_json() if c['name'] == 'Иерархия'][0]
+anon.post('/api/web/ab/rules', json={'collection_id': col_h['id'], 'type': 2, 'to_id': gid_m, 'rule': 1})
+r = client.post('/api/ab/shared/profiles', headers=HC)
+check('subgroup member sees collection', any(p['guid'] == col_h['guid'] for p in r.get_json()['data']))
+anon.post(f'/api/web/groups/{gid_d}/members', json={'member_type': 'user', 'member_id': bob_id})
+r = client.post('/api/login', json={'username': 'bob', 'password': 'pass1234', 'uuid': 'uuid-b2', 'id': 'dev-b2'})
+HB2 = {'Authorization': 'Bearer ' + r.get_json()['access_token']}
+r = client.post('/api/ab/shared/profiles', headers=HB2)
+check('container member inherits subgroup rights', any(p['guid'] == col_h['guid'] for p in r.get_json()['data']))
+# Обратное направление не действует
+r = anon.post('/api/web/ab/collections', json={'name': 'Только дирекция'})
+col_d = [c for c in anon.get('/api/web/ab/collections').get_json() if c['name'] == 'Только дирекция'][0]
+anon.post('/api/web/ab/rules', json={'collection_id': col_d['id'], 'type': 2, 'to_id': gid_d, 'rule': 1})
+r = client.post('/api/ab/shared/profiles', headers=HC)
+check('subgroup does not inherit container rights', all(p['guid'] != col_d['guid'] for p in r.get_json()['data']))
+r = client.post('/api/ab/shared/profiles', headers=HB2)
+check('container member sees container collection', any(p['guid'] == col_d['guid'] for p in r.get_json()['data']))
+
+# ================= ПРАВА АДМИНИСТРАТОРА ЧЕРЕЗ ГРУППУ =================
+print('== admin rights via Administrators group ==')
+cu('dave', 'pass1234', 'user', None, users_gid)
+dave_id = fake_execute_query("SELECT id FROM users WHERE username='dave'", fetch_one=True)['id']
+anon.post(f'/api/web/groups/{admins_gid}/members', json={'member_type': 'user', 'member_id': dave_id})
+dc = flask_app.test_client()
+dc.post('/api/login', json={'username': 'dave', 'password': 'pass1234'})
+r = dc.get('/api/session/check')
+check('Administrators member gets admin session', r.get_json()['role'] == 'admin')
+check('Administrators member sees /admin', dc.get('/admin').status_code == 200)
+anon.post(f'/api/web/groups/{users_gid}/members', json={'member_type': 'user', 'member_id': carol_id})
+cc = flask_app.test_client()
+cc.post('/api/login', json={'username': 'carol', 'password': 'pass1234'})
+r = cc.get('/api/session/check')
+check('Users member does not inherit admin rights', r.get_json()['role'] == 'user')
+check('Users member denied /admin', cc.get('/admin').status_code in (301, 302))
+
+# ================= УСТРОЙСТВА: ОБЛАСТЬ ВИДИМОСТИ =================
+print('== devices scope ==')
+fake_execute_query("""INSERT INTO computers (id, uuid, hostname, username, os, user_id, group_id)
+    VALUES ('dev-c2','uuid-c2','C-PC','carol','Windows / 11', ?, ?)""", (carol_id, users_gid))
+r = cc.get('/api/computers')
+rows = r.get_json()
+check('non-admin sees only own devices', len(rows) == 1 and rows[0]['user_id'] == carol_id)
+r = cc.get('/api/stats')
+check('non-admin stats scoped', r.get_json()['total_computers'] == 1)
+r = anon.get('/api/computers')
+check('admin sees all devices', any(c['id'] == 'dev-a1' for c in r.get_json())
+      and any(c['id'] == 'dev-c2' for c in r.get_json()))
+
+# ================= LDAP-АУТЕНТИФИКАЦИЯ =================
+print('== ldap login ==')
+import modules.ldap_auth as ldap_mod  # noqa: E402
+ldap_mod.is_enabled = lambda: True
+ldap_mod.search_groups = lambda q: [{'name': 'AD-Разработчики',
+                                     'dn': 'CN=AD-Разработчики,OU=Groups,DC=asmnet,DC=ru',
+                                     'sid': 'S-1-5-21-100'}]
+
+
+def fake_auth(u, p):
+    login = (u.split('@')[0].split('\\')[-1]).lower()
+    if login == 'jsmith' and p == 'LdapPass1':
+        return {'dn': 'CN=John Smith,OU=Users,DC=asmnet,DC=ru', 'username': 'jsmith',
+                'display_name': 'John Smith', 'email': 'jsmith@asmnet.ru',
+                'group_sids': ['S-1-5-21-100']}
+    return None
+
+
+ldap_mod.authenticate = fake_auth
+
+r = anon.get('/api/web/ad/groups?search=разраб')
+check('ad group search', r.status_code == 200 and len(r.get_json()) == 1)
+r = anon.post('/api/web/groups/ad', json={'name': 'AD-Разработчики',
+                                          'dn': 'CN=AD-Разработчики,OU=Groups,DC=asmnet,DC=ru',
+                                          'sid': 'S-1-5-21-100'})
+check('ad group added', r.status_code == 201)
+r = anon.get('/api/web/ad/groups?search=разраб')
+check('already added ad group excluded', r.get_json() == [])
+
+r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1',
+                                    'uuid': 'uuid-j1', 'id': 'dev-j1'})
+check('ldap client login (user@domain)', r.status_code == 200 and r.get_json().get('access_token'))
+check('ldap user payload', r.get_json()['user']['name'] == 'jsmith'
+      and r.get_json()['user']['is_admin'] is False)
+HJ = {'Authorization': 'Bearer ' + r.get_json()['access_token']}
+jr = fake_execute_query("SELECT * FROM users WHERE username='jsmith'", fetch_one=True)
+check('ldap user provisioned', bool(jr) and jr['auth_source'] == 'ldap' and jr['group_id'] == users_gid)
+check('ldap dn stored', jr['ldap_dn'] == 'CN=John Smith,OU=Users,DC=asmnet,DC=ru')
+gm = fake_execute_query("""SELECT gm.member_id, g.name FROM group_members gm
+    JOIN groups g ON g.id = gm.group_id
+    WHERE gm.member_type='user' AND gm.member_id=?""", (jr['id'],), fetch_all=True)
+check('ldap user in Users and AD group',
+      sorted(x['name'] for x in gm) == ['AD-Разработчики', 'Users'])
+r = client.get('/api/user/info', headers=HJ)
+check('ldap token works', r.status_code == 200 and r.get_json()['name'] == 'jsmith')
+
+r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'wrong', 'uuid': 'x'})
+check('ldap wrong password rejected', r.status_code == 401)
+r = client.post('/api/login', json={'username': 'ASMNET\\jsmith', 'password': 'LdapPass1',
+                                    'uuid': 'uuid-j2', 'id': 'dev-j2'})
+check('ldap DOMAIN\\user login', r.status_code == 200)
+r = client.post('/api/login', json={'username': 'jsmith', 'password': 'LdapPass1'})
+check('ldap user cannot login via local form', r.status_code == 401)
+r = client.post('/api/login', json={'username': 'unknown@asmnet.ru', 'password': 'LdapPass1', 'uuid': 'x'})
+check('unknown domain user rejected', r.status_code == 401)
+r = client.post('/api/login', json={'username': 'admin@asmnet.ru', 'password': 'admin', 'uuid': 'x'})
+check('local user name collision rejected', r.status_code == 401)
+
+jc = flask_app.test_client()
+r = jc.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1'})
+check('ldap web login', r.status_code == 200 and r.get_json()['role'] == 'user')
+r = anon.put(f"/api/users/{jr['id']}/password", json={'new_password': '12345'})
+check('ldap user password change denied', r.status_code == 403)
+ldap_mod.is_enabled = lambda: False
+r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1', 'uuid': 'x'})
+check('ldap disabled rejects domain login', r.status_code == 401)
+ldap_mod.is_enabled = lambda: True
+
+# ================= КОЛЛЕКЦИИ: СМЕНА ВЛАДЕЛЬЦА, ПРАВА ЗАПИСИ =================
+print('== collection owner change ==')
+r = cc.post('/api/web/ab/collections', json={'name': 'Кэрол'})
+check('carol collection created', r.status_code == 201)
+col_c = [c for c in cc.get('/api/web/ab/collections').get_json() if c['name'] == 'Кэрол'][0]
+cc.post('/api/web/ab/rules', json={'collection_id': col_c['id'], 'type': 1, 'to_id': bob_id, 'rule': 3})
+ac = flask_app.test_client()
+ac.post('/api/login', json={'username': 'alice', 'password': 'pass1234'})
+r = ac.put(f"/api/web/ab/collections/{col_c['id']}/owner", json={'user_id': alice_id})
+check('owner change denied without full rights', r.status_code == 403)
+bc = flask_app.test_client()
+bc.post('/api/login', json={'username': 'bob', 'password': 'pass1234'})
+r = bc.put(f"/api/web/ab/collections/{col_c['id']}/owner", json={'user_id': alice_id})
+check('owner change by full-rights user', r.status_code == 200)
+col_c2 = [c for c in ac.get('/api/web/ab/collections').get_json() if c['id'] == col_c['id']][0]
+check('owner updated', col_c2['owner'] == 'alice' and col_c2['owner_id'] == alice_id)
+check('guid rebuilt after owner change', col_c2['guid'] != col_c['guid'])
+
+print('== read-write rights ==')
+r = ac.post('/api/web/ab/rules', json={'collection_id': col_c['id'], 'type': 1, 'to_id': carol_id, 'rule': 2})
+check('grant read-write', r.status_code == 200)
+r = client.post(f"/api/ab/peer/add/{col_c2['guid']}", headers=HC,
+                json={'id': 'rw-1', 'hostname': 'RW-PC'})
+check('read-write add peer', r.status_code == 200)
+r = client.delete(f"/api/ab/peer/{col_c2['guid']}", headers=HC, json=['rw-1'])
+check('read-write delete peer', r.status_code == 200, r.data)
 
 print(f'\nALL {passed} CHECKS PASSED')

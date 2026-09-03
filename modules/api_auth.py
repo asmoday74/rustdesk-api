@@ -8,48 +8,100 @@ from modules.auth import (
 )
 from modules.database import execute_query, get_user_by_username as get_user
 
+
+def provision_ldap_user(info):
+    """Создаёт/обновляет локальную запись доменного пользователя.
+    Возвращает пользователя или None при конфликте с локальной записью."""
+    from modules import groups as gr
+    username = info.get('username') or ''
+    if not username:
+        return None
+    user = get_user(username)
+    if user:
+        if user.get('auth_source', 'local') != 'ldap':
+            return None
+        if info.get('dn') and info['dn'] != user.get('ldap_dn'):
+            execute_query('UPDATE users SET ldap_dn = %s WHERE id = %s',
+                          (info['dn'], user['id']))
+    else:
+        import secrets
+        users_group = gr.get_builtin_group(gr.BUILTIN_USERS)
+        primary_gid = users_group['id'] if users_group else 1
+        execute_query("""
+            INSERT INTO users (username, password_hash, role, email, group_id,
+                               auth_source, ldap_dn, nickname)
+            VALUES (%s, %s, 'user', %s, %s, 'ldap', %s, %s)
+        """, (username, secrets.token_hex(32), info.get('email') or None,
+              primary_gid, info.get('dn') or '', info.get('display_name') or ''))
+        user = get_user(username)
+        if user and users_group:
+            gr.add_member(users_group['id'], gr.MEMBER_USER, user['id'])
+    if user:
+        gr.sync_ad_memberships(user['id'], info.get('group_sids') or [])
+    return user
+
+
 def init_auth_routes(app):
     
     @app.route('/api/login', methods=['POST'])
     def login():
         try:
             data = request.get_json()
-            user = get_user(data.get('username'))
+            username = (data.get('username') or '').strip()
+            password = data.get('password') or ''
+            from modules import ldap_auth
 
-            if user and verify_password(user.get('password_hash'), data.get('password')):
-                # Режим клиента RustDesk: запрос содержит uuid/deviceInfo.
-                # Совместимость с lejianwen/rustdesk-api - выдаем access_token
-                if data.get('uuid') or data.get('deviceInfo'):
-                    from modules import ab
-                    if not ab.is_user_enabled(user):
-                        return jsonify({'error': 'UserDisabled'}), 401
-                    token = ab.create_user_token(user, data.get('id'), data.get('uuid'))
-                    # Привязываем устройство к владельцу для вкладки "Группа"
-                    ab.bind_device_user(data.get('uuid'), user)
-                    update_user_last_login(user['id'])
-                    add_audit_log(user['id'], 'CLIENT_LOGIN', data.get('username'),
-                                  f"RustDesk client login (device: {data.get('id')})", request.remote_addr)
-                    return jsonify({
-                        'access_token': token,
-                        'type': 'access_token',
-                        'user': ab.user_payload(user)
-                    }), 200
+            if ldap_auth.parse_domain_login(username):
+                # Доменный вход: только через LDAP
+                if not ldap_auth.is_enabled():
+                    return jsonify({'error': 'LDAP authentication is not configured'}), 401
+                info = ldap_auth.authenticate(username, password)
+                if not info:
+                    return jsonify({'error': 'Invalid credentials'}), 401
+                user = provision_ldap_user(info)
+                if not user:
+                    return jsonify({'error': 'Invalid credentials'}), 401
+            else:
+                # Локальный вход
+                user = get_user(username)
+                if user and user.get('auth_source', 'local') != 'local':
+                    return jsonify({'error': 'Invalid credentials'}), 401
+                if not (user and verify_password(user.get('password_hash'), password)):
+                    return jsonify({'error': 'Invalid credentials'}), 401
 
-                session['user_id'] = user['id']
-                session['username'] = user['username']
-                session['role'] = user['role']
-                session['login_time'] = datetime.now().isoformat()
-                session['last_activity'] = datetime.now().isoformat()
-
+            # Режим клиента RustDesk: запрос содержит uuid/deviceInfo.
+            # Совместимость с lejianwen/rustdesk-api - выдаем access_token
+            if data.get('uuid') or data.get('deviceInfo'):
+                from modules import ab
+                if not ab.is_user_enabled(user):
+                    return jsonify({'error': 'UserDisabled'}), 401
+                token = ab.create_user_token(user, data.get('id'), data.get('uuid'))
+                # Привязываем устройство к владельцу для вкладки "Группа"
+                ab.bind_device_user(data.get('uuid'), user)
                 update_user_last_login(user['id'])
-                add_audit_log(user['id'], 'LOGIN', data.get('username'), 'Successful login', request.remote_addr)
-
+                add_audit_log(user['id'], 'CLIENT_LOGIN', username,
+                              f"RustDesk client login (device: {data.get('id')})", request.remote_addr)
                 return jsonify({
-                    'status': 'success',
-                    'role': user['role'],
-                    'session_timeout_hours': get_session_timeout_seconds() / 3600
+                    'access_token': token,
+                    'type': 'access_token',
+                    'user': ab.user_payload(user)
                 }), 200
-            return jsonify({'error': 'Invalid credentials'}), 401
+
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            from modules import groups as gr
+            session['role'] = 'admin' if gr.is_admin_user(user) else (user.get('role') or 'user')
+            session['login_time'] = datetime.now().isoformat()
+            session['last_activity'] = datetime.now().isoformat()
+
+            update_user_last_login(user['id'])
+            add_audit_log(user['id'], 'LOGIN', username, 'Successful login', request.remote_addr)
+
+            return jsonify({
+                'status': 'success',
+                'role': session['role'],
+                'session_timeout_hours': get_session_timeout_seconds() / 3600
+            }), 200
         except Exception as e:
             return jsonify({'error': str(e)}), 500
     
@@ -176,6 +228,10 @@ def init_auth_routes(app):
             user = get_user_by_id(user_id)
             if not user:
                 return jsonify({'error': 'User not found'}), 404
+            
+            # Для доменных пользователей пароль управляется каталогом
+            if user.get('auth_source', 'local') != 'local':
+                return jsonify({'error': 'Password is managed by the domain'}), 403
             
             # Хешируем новый пароль
             new_password_hash = hash_password(new_password)

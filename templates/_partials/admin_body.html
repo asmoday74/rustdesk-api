@@ -24,6 +24,64 @@
 
 </section>
 
+<section id="section-groups">
+<div class="panel">
+    <div class="panel-head">
+        <h3 data-i18n="groups_title">Группы</h3>
+        <div class="panel-head-actions">
+            <button class="btn btn-ghost" id="addAdGroupBtn"><i class="fas fa-sitemap"></i> <span data-i18n="add_ad_group">Добавить из AD</span></button>
+            <button class="btn btn-primary" id="addGroupBtn"><i class="fas fa-plus"></i> <span data-i18n="add_group">Добавить группу</span></button>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="computers-table">
+            <thead><tr>
+                <th data-i18n="col_group_name">Название</th>
+                <th data-i18n="col_group_type">Тип</th>
+                <th data-i18n="col_group_members">Члены группы</th>
+                <th data-i18n="col_group_note">Комментарий</th>
+                <th data-i18n="col_actions">Действия</th>
+            </tr></thead>
+            <tbody id="groupsTableBody"><tr><td colspan="5" class="empty-state" data-i18n="loading">Загрузка...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+</section>
+
+<!-- Модалка группы -->
+<div id="groupModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 id="groupModalTitle" data-i18n="add_group">Добавить группу</h3><button class="close close-group-modal">&times;</button></div>
+    <form id="groupForm">
+        <div class="form-group"><label><span data-i18n="col_group_name">Название</span> *</label><input type="text" id="groupName" required></div>
+        <div class="form-group"><label data-i18n="group_shared_label">Участники видят устройства друг друга</label>
+            <select id="groupType"><option value="1" data-i18n="no">Нет</option><option value="2" data-i18n="yes">Да</option></select></div>
+        <div class="form-group"><label data-i18n="col_group_note">Комментарий</label><input type="text" id="groupNote"></div>
+        <button type="submit" class="btn btn-primary" data-i18n="save">Сохранить</button>
+    </form>
+    <div id="groupMembersBlock" style="display:none;">
+        <h4 style="margin:14px 0 6px;" data-i18n="group_members_title">Члены группы</h4>
+        <div id="groupMembersList" class="members-list"></div>
+        <div class="add-member-row">
+            <select id="memberTypeSel">
+                <option value="user" data-i18n="user_label">Пользователь</option>
+                <option value="group" data-i18n="group">Группа</option>
+            </select>
+            <select id="memberSel"></select>
+            <button type="button" class="btn btn-primary btn-sm" id="addMemberBtn" data-i18n="add">Добавить</button>
+        </div>
+    </div>
+</div></div>
+
+<!-- Модалка добавления группы из AD -->
+<div id="adGroupModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 data-i18n="add_ad_group">Добавить из AD</h3><button class="close close-adgroup-modal">&times;</button></div>
+    <div class="add-member-row">
+        <input type="text" id="adGroupSearch" data-i18n-ph="ad_search_placeholder" placeholder="Имя группы в AD">
+        <button type="button" class="btn btn-primary btn-sm" id="adGroupSearchBtn" data-i18n="search">Поиск</button>
+    </div>
+    <div id="adGroupResults" class="members-list"></div>
+</div></div>
+
 <!-- Модалка пользователя -->
 <div id="userModal" class="modal"><div class="modal-content">
     <div class="modal-header"><h3 data-i18n="add_user">Добавить пользователя</h3><button class="close">&times;</button></div>

@@ -188,6 +188,13 @@ a { color: var(--accent); }
 .tags-checkbox-list input[type="checkbox"] { width: auto; flex: 0 0 auto; }
 .readonly-note { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); padding: 9px 13px; border-radius: var(--radius-sm); font-size: .82rem; margin-bottom: 12px; }
 
+/* ===== Группы: однострочные ячейки и состав ===== */
+.cell-ellipsis { display: block; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.members-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px 10px; margin-bottom: 10px; }
+.add-member-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.add-member-row select, .add-member-row input { flex: 1; min-width: 120px; }
+
 /* ===== Скроллбар ===== */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }

@@ -1,16 +1,25 @@
 from flask import request, jsonify, session
-from modules.database import get_all_computers, get_stats, delete_computer_by_uuid
+from modules.database import get_all_computers, get_stats, delete_computer_by_uuid, execute_query
 from modules.auth import require_auth, require_admin, add_audit_log
+from modules import groups as gr
 
 def init_computers_routes(app):
     """Инициализация маршрутов для работы с компьютерами"""
-    
+
+    def _current_scope_user_id():
+        """None = видны все устройства (админ), иначе только свои (user_id)"""
+        user = execute_query('SELECT * FROM users WHERE id = %s',
+                             (session.get('user_id'),), fetch_one=True)
+        if user and gr.is_admin_user(user):
+            return None
+        return session.get('user_id')
+
     @app.route('/api/computers', methods=['GET'])
     def get_computers_api():
         auth_check = require_auth(lambda: None)()
         if isinstance(auth_check, tuple):
             return auth_check
-        return jsonify(get_all_computers())
+        return jsonify(get_all_computers(_current_scope_user_id()))
     
     @app.route('/api/computers/<string:uuid>', methods=['DELETE'])
     def delete_computer(uuid):
@@ -30,13 +39,12 @@ def init_computers_routes(app):
         if isinstance(auth_check, tuple):
             return auth_check
         
-        stats = get_stats()
+        stats = get_stats(_current_scope_user_id())
         stats['api_version'] = '2.0.0'
         return jsonify(stats)
     
     @app.route('/api/audit', methods=['GET'])
     def get_audit_logs():
-        from modules.database import execute_query
         auth_check = require_admin(lambda: None)()
         if isinstance(auth_check, tuple):
             return auth_check
