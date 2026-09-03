@@ -727,10 +727,18 @@ def init_ab_routes(app):
         if body.get('member_type') not in (gr.MEMBER_USER, gr.MEMBER_GROUP) or not body.get('member_id'):
             return _error('ParamsError')
         g = gr.group_info_by_id(group_id)
-        if g and g.get('builtin') == gr.BUILTIN_ADMINS \
+        if not g:
+            return _error('ItemNotFound', 404)
+        if g.get('builtin') == gr.BUILTIN_ADMINS \
                 and body['member_type'] == gr.MEMBER_USER \
                 and gr.is_last_admin_user(body['member_id']):
             return _error('Cannot remove the last administrator')
+        # Доменные группы у пользователей AD: состав синхронизируется каталогом
+        if g.get('source') == gr.GROUP_SOURCE_AD and body['member_type'] == gr.MEMBER_USER:
+            member = execute_query('SELECT auth_source FROM users WHERE id = %s',
+                                   (body['member_id'],), fetch_one=True)
+            if member and (member.get('auth_source') or 'local') != 'local':
+                return _error('AD group membership is managed by the directory')
         gr.remove_member(group_id, body['member_type'], body['member_id'])
         return jsonify({'message': 'Member removed'})
 

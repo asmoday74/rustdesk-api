@@ -125,8 +125,9 @@ ru: {
     user_updated: 'Пользователь обновлён',
     display_name_label: 'Имя',
     col_groups: 'Группы',
-    primary_group: 'Первичная группа',
+    primary_group: 'Основная группа',
     ldap_login_locked: 'Логин доменного пользователя управляется AD',
+    ad_membership_locked: 'Доменные группы пользователя AD управляются каталогом',
     // списки устройств (адресная книга)
     tab_address_book: 'Адресная книга',
     tab_collections: 'Коллекции',
@@ -429,8 +430,9 @@ en: {
     user_updated: 'User updated',
     display_name_label: 'Name',
     col_groups: 'Groups',
-    primary_group: 'Primary group',
+    primary_group: 'Main group',
     ldap_login_locked: 'Domain username is managed by AD',
+    ad_membership_locked: 'AD user domain groups are managed by the directory',
     // device lists (address book)
     tab_address_book: 'Address book',
     tab_collections: 'Collections',

@@ -790,4 +790,30 @@ check('ldap username change rejected', r.status_code == 400)
 r = anon.put(f"/api/users/{jr['id']}", json={'nickname': 'John D.', 'email': 'j@asmnet.ru'})
 check('ldap other fields editable', r.status_code == 200)
 
+# ---- управление группами пользователя ----
+print('== user group memberships ==')
+ad_group = fake_execute_query("SELECT * FROM groups WHERE source='ad' LIMIT 1", fetch_one=True)
+r = anon.post(f'/api/users/{carol_id}/groups', json={'group_id': gid_d})
+check('add user to group via user endpoint', r.status_code == 200)
+users_row = anon.get('/api/users').get_json()
+carol_api = [u for u in users_row if u['id'] == carol_id][0]
+check('membership visible in users list',
+      any(m['group_id'] == gid_d for m in carol_api['memberships']))
+r = anon.delete(f'/api/users/{carol_id}/groups', json={'group_id': gid_d})
+check('remove user from group via user endpoint', r.status_code == 200)
+# Локального пользователя можно убрать из AD-группы вручную
+r = anon.post(f'/api/users/{bob_id}/groups', json={'group_id': ad_group['id']})
+check('add local user to AD group', r.status_code == 200)
+r = anon.delete(f'/api/users/{bob_id}/groups', json={'group_id': ad_group['id']})
+check('remove local user from AD group', r.status_code == 200)
+# Доменные группы пользователя AD не удаляются
+r = anon.delete(f'/api/users/{jr["id"]}/groups', json={'group_id': ad_group['id']})
+check('AD user cannot be removed from AD group (user endpoint)', r.status_code == 400)
+r = anon.delete(f"/api/web/groups/{ad_group['id']}/members",
+                json={'member_type': 'user', 'member_id': jr['id']})
+check('AD user cannot be removed from AD group (group endpoint)', r.status_code == 400)
+# Последний админ защищён и на этом эндпоинте
+r = anon.delete(f'/api/users/{admin_id}/groups', json={'group_id': admins_gid})
+check('last admin cannot be removed via user endpoint', r.status_code == 400)
+
 print(f'\nALL {passed} CHECKS PASSED')

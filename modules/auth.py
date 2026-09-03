@@ -89,7 +89,8 @@ def get_all_users():
         'SELECT id, username, nickname, email, group_id, auth_source, created_at, last_login FROM users',
         fetch_all=True) or []
     memberships = execute_query("""
-        SELECT gm.member_id AS user_id, g.name AS group_name, g.builtin AS builtin
+        SELECT gm.member_id AS user_id, g.id AS group_id, g.name AS group_name,
+               g.source AS source, g.builtin AS builtin
         FROM group_members gm
         JOIN groups g ON g.id = gm.group_id
         WHERE gm.member_type = 'user'
@@ -100,6 +101,10 @@ def get_all_users():
     for u in users:
         ms = by_user.get(u['id'], [])
         u['groups'] = sorted(m['group_name'] for m in ms)
+        u['memberships'] = [
+            {'group_id': m['group_id'], 'name': m['group_name'], 'source': m['source'] or 'local'}
+            for m in sorted(ms, key=lambda x: x['group_name'].lower())
+        ]
         u['is_admin'] = any(m['builtin'] == 2 for m in ms)
     return users
 

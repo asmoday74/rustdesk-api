@@ -44,10 +44,18 @@
     <form id="editUserForm">
         <div class="form-group"><label data-i18n="login_label">Логин</label><input type="text" id="editUsername"></div>
         <div class="form-group"><label data-i18n="display_name_label">Имя</label><input type="text" id="editNickname"></div>
-        <div class="form-group"><label data-i18n="primary_group">Первичная группа</label><select id="editGroup"></select></div>
+        <div class="form-group"><label data-i18n="primary_group">Основная группа</label><select id="editGroup"></select></div>
         <div class="form-group"><label>Email</label><input type="email" id="editEmail"></div>
         <button type="submit" class="btn btn-primary" data-i18n="save">Сохранить</button>
     </form>
+    <div class="form-group" style="margin-top:14px;">
+        <label data-i18n="col_groups">Группы</label>
+        <div id="editUserGroupsList" class="members-list"></div>
+        <div class="add-member-row">
+            <select id="editUserGroupSel"></select>
+            <button type="button" class="btn btn-primary btn-sm" id="addUserGroupBtn" data-i18n="add">Добавить</button>
+        </div>
+    </div>
 </div></div>
 
 <!-- Модалка смены пароля -->

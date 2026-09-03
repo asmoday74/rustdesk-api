@@ -246,6 +246,57 @@ def init_auth_routes(app):
         add_audit_log(session.get('user_id'), 'UPDATE_USER',
                       username or user['username'], 'User updated', request.remote_addr)
         return jsonify({'message': 'User updated'}), 200
+
+    @app.route('/api/users/<int:user_id>/groups', methods=['POST'])
+    def add_user_group(user_id):
+        """Добавить пользователя в группу (только администратор)"""
+        from modules.auth import require_admin, add_audit_log
+        from modules import groups as gr
+        auth_check = require_admin(lambda: None)()
+        if isinstance(auth_check, tuple):
+            return auth_check
+        user = get_user_by_id(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        body = request.get_json() or {}
+        group_id = body.get('group_id')
+        if not gr.group_info_by_id(group_id):
+            return jsonify({'error': 'Group not found'}), 404
+        ok, err = gr.add_member(group_id, gr.MEMBER_USER, user_id)
+        if not ok:
+            code = 404 if err in ('GroupNotFound', 'UserNotFound') else 400
+            return jsonify({'error': err or 'ParamsError'}), code
+        add_audit_log(session.get('user_id'), 'ADD_USER_GROUP', user['username'],
+                      f'Added to group id={group_id}', request.remote_addr)
+        return jsonify({'message': 'Member added'}), 200
+
+    @app.route('/api/users/<int:user_id>/groups', methods=['DELETE'])
+    def remove_user_group(user_id):
+        """Исключить пользователя из группы (только администратор).
+        Доменные группы у пользователей AD не удаляются — их состав
+        синхронизируется из каталога при входе."""
+        from modules.auth import require_admin, add_audit_log
+        from modules import groups as gr
+        auth_check = require_admin(lambda: None)()
+        if isinstance(auth_check, tuple):
+            return auth_check
+        user = get_user_by_id(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        body = request.get_json() or {}
+        group_id = body.get('group_id')
+        g = gr.group_info_by_id(group_id)
+        if not g:
+            return jsonify({'error': 'Group not found'}), 404
+        if g.get('source') == gr.GROUP_SOURCE_AD \
+                and user.get('auth_source', 'local') != 'local':
+            return jsonify({'error': 'AD group membership is managed by the directory'}), 400
+        if g.get('builtin') == gr.BUILTIN_ADMINS and gr.is_last_admin_user(user_id):
+            return jsonify({'error': 'Cannot remove the last administrator'}), 400
+        gr.remove_member(group_id, gr.MEMBER_USER, user_id)
+        add_audit_log(session.get('user_id'), 'REMOVE_USER_GROUP', user['username'],
+                      f'Removed from group id={group_id}', request.remote_addr)
+        return jsonify({'message': 'Member removed'}), 200
     
     @app.route('/api/users/<int:user_id>', methods=['DELETE'])
     def remove_user(user_id):

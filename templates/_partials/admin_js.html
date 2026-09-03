@@ -61,6 +61,7 @@
 
     // ================= РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ =================
     const editUserModal=document.getElementById('editUserModal');
+    function editingUser(){ return allUsersList.find(x=>x.id===editingUserId)||null; }
     function openEditUserModal(id){ const u=allUsersList.find(x=>x.id===id); if(!u)return;
         editingUserId=id;
         const isLdap=(u.auth_source||'local')!=='local';
@@ -69,7 +70,34 @@
         editNickname.value=u.nickname||'';
         editEmail.value=u.email||'';
         editGroup.value=String(u.group_id||1);
+        renderEditUserGroups();
         editUserModal.classList.add('active'); }
+    function renderEditUserGroups(){ const u=editingUser(); const c=document.getElementById('editUserGroupsList');
+        if(!u){ c.innerHTML=''; return; }
+        const isLdap=(u.auth_source||'local')!=='local';
+        const ms=u.memberships||[];
+        c.innerHTML=ms.length?ms.map(m=>{ const locked=isLdap&&m.source==='ad';
+            return `<div class="rule-row">
+                <i class="fas ${m.source==='ad'?'fa-sitemap':'fa-users'}"></i>
+                <b style="flex:1;">${escapeHtml(m.name)}${m.source==='ad'?' (AD)':''}</b>
+                ${locked?`<span class="tag-badge" title="${t('ad_membership_locked')}"><i class="fas fa-lock"></i></span>`
+                        :`<button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="removeUserGroup(${m.group_id})"><i class="fas fa-trash"></i></button>`}
+            </div>`; }).join(''):`<p style="color:var(--muted);">${t('group_no_members')}</p>`;
+        applyI18n(c);
+        const memberIds=ms.map(m=>m.group_id);
+        document.getElementById('editUserGroupSel').innerHTML=allGroups
+            .filter(g=>!memberIds.includes(g.id))
+            .map(g=>`<option value="${g.id}">${escapeHtml(g.name)}${g.source==='ad'?' (AD)':''}</option>`).join(''); }
+    document.getElementById('addUserGroupBtn').onclick=async()=>{ if(!editingUserId)return;
+        const gid=parseInt(document.getElementById('editUserGroupSel').value);
+        if(!gid){ showToast(t('error'),true); return; }
+        try{ await apiFetch(`/api/users/${editingUserId}/groups`,{method:'POST',body:JSON.stringify({group_id:gid})});
+            await loadUsers(); renderEditUserGroups(); }
+        catch(e){ showToast(e.message,true); } };
+    async function removeUserGroup(gid){ if(!editingUserId)return;
+        try{ await apiFetch(`/api/users/${editingUserId}/groups`,{method:'DELETE',body:JSON.stringify({group_id:gid})});
+            await loadUsers(); renderEditUserGroups(); }
+        catch(e){ showToast(e.message,true); } }
     editUserModal.querySelector('.close-edituser-modal').onclick=()=>editUserModal.classList.remove('active');
     document.getElementById('editUserForm').addEventListener('submit', async e=>{ e.preventDefault();
         if(!editingUserId)return;
