@@ -15,11 +15,20 @@
 Форматы входа: user@domain.name или DOMAIN\\User. Во втором случае префикс
 домена отбрасывается, поиск идёт по sAMAccountName в настроенном каталоге.
 """
+import logging
 import os
+import sys
 
 DEFAULT_USER_FILTER = '(|(sAMAccountName={login})(userPrincipalName={login}))'
 DEFAULT_GROUP_FILTER = '(&(objectClass=group)(name=*{query}*))'
 GROUP_SEARCH_LIMIT = 50
+
+_log = logging.getLogger('ldap_auth')
+if not _log.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - ldap_auth - %(message)s'))
+    _log.addHandler(_handler)
+    _log.setLevel(logging.INFO)
 
 
 def _env(name, default=''):
@@ -100,26 +109,36 @@ def _entry_info(entry):
         'username': attr('sAMAccountName') or attr('userPrincipalName').split('@')[0],
         'display_name': attr('displayName'),
         'email': attr('mail') or attr('userPrincipalName'),
-        'group_sids': _group_sids(entry),
+        'group_sids': [],
     }
 
 
 def authenticate(username, password):
     """Проверяет доменного пользователя. Возвращает словарь
-    {dn, username, display_name, email, group_sids} или None."""
+    {dn, username, display_name, email, group_sids} или None.
+    Причины отказа логируются (контейнер: docker logs)."""
     if not is_enabled() or not password:
+        _log.warning('authenticate: LDAP disabled or empty password (user=%r)', username)
         return None
     login = parse_domain_login(username) or (username or '').strip()
     if not login:
+        _log.warning('authenticate: empty login after parse (user=%r)', username)
         return None
     try:
         import ldap3
     except ImportError:
+        _log.error('authenticate: ldap3 is not installed')
         return None
 
     base = _env('LDAP_BASE_DN')
     user_filter = _env('LDAP_USER_FILTER', DEFAULT_USER_FILTER).replace('{login}', _escape(login))
+    # Для входа по user@domain дополнительно ищем по полному UPN
+    # (sAMAccountName не всегда совпадает с префиксом UPN)
+    raw = (username or '').strip()
+    if '@' in raw:
+        user_filter = f'(|{user_filter}(userPrincipalName={_escape(raw)}))'
     timeout = _timeout()
+    core_attrs = ['sAMAccountName', 'displayName', 'mail', 'userPrincipalName']
     try:
         server = _server()
         bind_dn = _env('LDAP_BIND_DN')
@@ -128,12 +147,14 @@ def authenticate(username, password):
             svc = ldap3.Connection(server, user=bind_dn, password=_env('LDAP_BIND_PASSWORD'),
                                    auto_bind=True, receive_timeout=timeout)
             try:
-                svc.search(base, user_filter, search_scope=ldap3.SUBTREE,
-                           attributes=['sAMAccountName', 'displayName', 'mail',
-                                       'userPrincipalName', 'tokenGroups'])
-                if not svc.entries:
+                found = svc.search(base, user_filter, search_scope=ldap3.SUBTREE,
+                                   attributes=core_attrs)
+                if not found or not svc.entries:
+                    _log.warning('authenticate: user not found (login=%s, base=%s, result=%s)',
+                                 login, base, svc.result)
                     return None
                 info = _entry_info(svc.entries[0])
+                info['group_sids'] = _fetch_token_groups(svc, info['dn'])
             finally:
                 svc.unbind()
         else:
@@ -142,22 +163,45 @@ def authenticate(username, password):
             direct = ldap3.Connection(server, user=(username or '').strip(), password=password,
                                       auto_bind=True, receive_timeout=timeout)
             try:
-                direct.search(base, user_filter, search_scope=ldap3.SUBTREE,
-                              attributes=['sAMAccountName', 'displayName', 'mail',
-                                          'userPrincipalName', 'tokenGroups'])
-                if not direct.entries:
+                found = direct.search(base, user_filter, search_scope=ldap3.SUBTREE,
+                                      attributes=core_attrs)
+                if not found or not direct.entries:
+                    _log.warning('authenticate: user not found on direct bind (login=%s, base=%s)',
+                                 login, base)
                     return None
-                return _entry_info(direct.entries[0])
+                info = _entry_info(direct.entries[0])
+                info['group_sids'] = _fetch_token_groups(direct, info['dn'])
+                return info
             finally:
                 direct.unbind()
 
         # Проверка пароля пользователя
-        user_conn = ldap3.Connection(server, user=info['dn'], password=password,
-                                     auto_bind=True, receive_timeout=timeout)
-        user_conn.unbind()
+        try:
+            user_conn = ldap3.Connection(server, user=info['dn'], password=password,
+                                         auto_bind=True, receive_timeout=timeout)
+            user_conn.unbind()
+        except Exception as e:
+            _log.warning('authenticate: password bind failed for %s: %s: %s',
+                         info['dn'], type(e).__name__, e)
+            return None
+        _log.info('authenticate: ok for %s (%s)', info['username'], info['dn'])
         return info
-    except Exception:
+    except Exception as e:
+        _log.error('authenticate: LDAP error for login=%s: %s: %s', login, type(e).__name__, e)
         return None
+
+
+def _fetch_token_groups(conn, dn):
+    """Читает tokenGroups отдельным запросом: не все каталоги отдают этот
+    вычисляемый атрибут в обычном поиске. При ошибке возвращает []."""
+    try:
+        import ldap3
+        conn.search(dn, '(objectClass=*)', search_scope=ldap3.BASE, attributes=['tokenGroups'])
+        if conn.entries:
+            return _group_sids(conn.entries[0])
+    except Exception as e:
+        _log.warning('tokenGroups unavailable for %s: %s: %s', dn, type(e).__name__, e)
+    return []
 
 
 def search_groups(query):
