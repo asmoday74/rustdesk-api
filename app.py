@@ -92,6 +92,14 @@ def admin_page():
         return auth_check
     return render_template(f'{get_design()}/admin.html', **page_ctx('admin'))
 
+@app.route('/groups')
+def groups_page():
+    from modules.auth import require_admin
+    auth_check = require_admin(lambda: None)()
+    if auth_check is not None:
+        return auth_check
+    return render_template(f'{get_design()}/groups.html', **page_ctx('groups'))
+
 @app.route('/ab')
 def ab_page():
     from modules.auth import require_auth

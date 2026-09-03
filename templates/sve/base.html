@@ -28,6 +28,7 @@
                 <a href="/"><i class="fas fa-chart-line"></i> <span data-i18n="nav_monitoring">Мониторинг</span></a>
                 <a href="/ab"><i class="fas fa-book"></i> <span data-i18n="nav_device_lists">Списки устройств</span></a>
                 {% if is_admin %}<a href="/admin"><i class="fas fa-cog"></i> <span data-i18n="nav_users">Пользователи</span></a>{% endif %}
+                {% if is_admin %}<a href="/groups"><i class="fas fa-users"></i> <span data-i18n="nav_groups">Группы</span></a>{% endif %}
                 {% if is_admin %}<a href="/audit"><i class="fas fa-shield-alt"></i> <span data-i18n="nav_audit">Аудит безопасности</span></a>{% endif %}
                 {% if is_admin %}<a href="/clientgen"><i class="fas fa-hammer"></i> <span data-i18n="nav_clientgen">Создание клиента</span></a>{% endif %}
                 <a href="/logout"><i class="fas fa-sign-out-alt"></i> <span data-i18n="logout">Выход</span></a>

@@ -1,5 +1,5 @@
 <script>
-    let allGroups=[]; let allUsersList=[]; let currentUserId=null; let currentGroupId=null;
+    let allGroups=[]; let allUsersList=[]; let currentUserId=null;
     let sessionCheckInterval=null; let activityTimeout=null;
 
     async function checkSession(){ try{ const r=await fetch('/api/session/check'); const d=await r.json();
@@ -16,12 +16,9 @@
     function formatDate(d){ if(!d)return t('never'); const dt=new Date(d); if(isNaN(dt))return t('never');
         const diff=(new Date()-dt)/1000; if(diff<60)return t('just_now'); if(diff<3600)return t('mins_ago',{n:Math.floor(diff/60)}); if(diff<86400)return t('hours_ago',{n:Math.floor(diff/3600)});
         return dt.toLocaleString(t('locale')); }
-    async function apiFetch(url,opt={}){ const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opt});
-        if(!r.ok){ let m=t('error')+' '+r.status; try{ const d=await r.json(); if(d.error)m=d.error; }catch(e){} throw new Error(m); }
-        const tx=await r.text(); return tx?JSON.parse(tx):null; }
 
     // ================= ПОЛЬЗОВАТЕЛИ =================
-    async function loadGroups(){ try{ allGroups=await apiFetch('/api/web/groups'); fillGroupSelects(); renderGroups(); }catch(e){} }
+    async function loadGroups(){ try{ const r=await fetch('/api/web/groups'); if(r.ok){ allGroups=await r.json(); fillGroupSelects(); } }catch(e){} }
     function fillGroupSelects(){ const s=document.getElementById('newGroup');
         s.innerHTML=allGroups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join(''); }
 
@@ -43,100 +40,6 @@
     async function deleteUser(id,name){ if(!confirm(t('confirm_delete_user',{name})))return;
         const r=await fetch(`/api/users/${id}`,{method:'DELETE'}); if(r.ok){showToast(t('user_deleted'));loadUsers();} else showToast(t('error'),true); }
 
-    // ================= ГРУППЫ =================
-    function renderGroups(){ const tb=document.getElementById('groupsTableBody');
-        if(!allGroups.length){ tb.innerHTML=`<tr><td colspan="5" class="empty-state">${t('no_groups')}</td></tr>`; return; }
-        tb.innerHTML=allGroups.map(g=>{ const members=(g.members||[]).join(', ');
-            return `<tr><td><b>${escapeHtml(g.name)}</b></td>
-            <td><span class="tag-badge">${g.source==='ad'?t('group_source_ad'):t('group_source_local')}</span></td>
-            <td><span class="cell-ellipsis" title="${escapeHtml(members)}">${members?escapeHtml(members):'—'}</span></td>
-            <td><span class="cell-ellipsis" title="${escapeHtml(g.note||'')}">${escapeHtml(g.note||'')||'—'}</span></td>
-            <td><div class="action-cell">
-                <button class="btn btn-warn btn-sm" data-i18n-title="edit" onclick="openGroupModal(${g.id})"><i class="fas fa-edit"></i></button>
-                ${g.builtin?'':`<button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="deleteGroup(${g.id},'${escapeHtml(g.name)}')"><i class="fas fa-trash"></i></button>`}
-            </div></td></tr>`; }).join('');
-        applyI18n(tb); }
-
-    async function deleteGroup(id,name){ if(!confirm(t('confirm_delete_group',{name})))return;
-        try{ await apiFetch(`/api/web/groups/${id}`,{method:'DELETE'}); showToast(t('deleted')); await loadGroups(); }
-        catch(e){ showToast(e.message,true); } }
-
-    const groupModal=document.getElementById('groupModal');
-    async function openGroupModal(id){ currentGroupId=id||null;
-        const isEdit=!!id;
-        document.getElementById('groupModalTitle').textContent=isEdit?t('edit_group'):t('add_group');
-        const membersBlock=document.getElementById('groupMembersBlock');
-        if(isEdit){ const g=allGroups.find(x=>x.id===id);
-            groupName.value=g?g.name:''; groupType.value=g?String(g.type||1):'1'; groupNote.value=(g&&g.note)||'';
-            membersBlock.style.display='block'; await loadGroupMembers(id); }
-        else { groupName.value=''; groupType.value='1'; groupNote.value=''; membersBlock.style.display='none'; }
-        groupModal.classList.add('active'); }
-    document.getElementById('addGroupBtn').onclick=()=>openGroupModal(null);
-    groupModal.querySelector('.close-group-modal').onclick=()=>groupModal.classList.remove('active');
-
-    document.getElementById('groupForm').addEventListener('submit', async e=>{ e.preventDefault();
-        const isEdit=currentGroupId!==null; const url=isEdit?`/api/web/groups/${currentGroupId}`:'/api/web/groups';
-        try{ await apiFetch(url,{method:isEdit?'PUT':'POST',body:JSON.stringify({
-                name:groupName.value.trim(), type:parseInt(groupType.value), note:groupNote.value.trim()})});
-            showToast(isEdit?t('group_updated'):t('group_created'));
-            groupModal.classList.remove('active'); await loadGroups();
-            if(!isEdit) fillGroupSelects();
-        }catch(err){ showToast(err.message,true); } });
-
-    async function loadGroupMembers(gid){ const c=document.getElementById('groupMembersList');
-        try{ const m=await apiFetch(`/api/web/groups/${gid}/members`);
-            const rows=[...(m.users||[]).map(u=>({type:'user',id:u.id,name:u.username})),
-                        ...(m.groups||[]).map(g=>({type:'group',id:g.id,name:g.name}))];
-            c.innerHTML=rows.length?rows.map(r=>`<div class="rule-row">
-                <i class="fas ${r.type==='group'?'fa-users':'fa-user'}"></i>
-                <b style="flex:1;">${escapeHtml(r.name)}</b>
-                <button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="removeMember('${r.type}',${r.id})"><i class="fas fa-trash"></i></button>
-            </div>`).join(''):`<p style="color:var(--muted);">${t('group_no_members')}</p>`;
-            applyI18n(c);
-            fillMemberSelect();
-        }catch(e){ c.innerHTML=''; showToast(e.message,true); } }
-
-    function fillMemberSelect(){ const tp=document.getElementById('memberTypeSel').value; const sel=document.getElementById('memberSel');
-        if(tp==='group'){ sel.innerHTML=allGroups.filter(g=>g.id!==currentGroupId)
-            .map(g=>`<option value="${g.id}">${escapeHtml(g.name)}${g.source==='ad'?' (AD)':''}</option>`).join(''); }
-        else { sel.innerHTML=allUsersList.map(u=>`<option value="${u.id}">${escapeHtml(u.username)}</option>`).join(''); } }
-    document.getElementById('memberTypeSel').addEventListener('change',fillMemberSelect);
-
-    document.getElementById('addMemberBtn').onclick=async()=>{ if(!currentGroupId)return;
-        const tp=document.getElementById('memberTypeSel').value; const mid=parseInt(document.getElementById('memberSel').value);
-        if(!mid){ showToast(t('error'),true); return; }
-        try{ await apiFetch(`/api/web/groups/${currentGroupId}/members`,{method:'POST',body:JSON.stringify({member_type:tp,member_id:mid})});
-            await Promise.all([loadGroupMembers(currentGroupId),loadGroups()]); }
-        catch(e){ showToast(e.message,true); } };
-
-    async function removeMember(tp,mid){ if(!currentGroupId)return;
-        try{ await apiFetch(`/api/web/groups/${currentGroupId}/members`,{method:'DELETE',body:JSON.stringify({member_type:tp,member_id:mid})});
-            await Promise.all([loadGroupMembers(currentGroupId),loadGroups()]); }
-        catch(e){ showToast(e.message,true); } }
-
-    // ================= ГРУППЫ ИЗ AD =================
-    const adGroupModal=document.getElementById('adGroupModal');
-    document.getElementById('addAdGroupBtn').onclick=()=>{ document.getElementById('adGroupSearch').value='';
-        document.getElementById('adGroupResults').innerHTML=''; adGroupModal.classList.add('active'); };
-    adGroupModal.querySelector('.close-adgroup-modal').onclick=()=>adGroupModal.classList.remove('active');
-
-    async function searchAdGroups(){ const q=document.getElementById('adGroupSearch').value.trim();
-        const c=document.getElementById('adGroupResults');
-        c.innerHTML=`<p style="color:var(--muted);">${t('loading')}</p>`;
-        try{ const found=await apiFetch(`/api/web/ad/groups?search=${encodeURIComponent(q)}`);
-            c.innerHTML=found.length?found.map((g,i)=>`<div class="rule-row">
-                <i class="fas fa-users"></i>
-                <b style="flex:1;">${escapeHtml(g.name)}</b>
-                <button class="btn btn-primary btn-sm" onclick='addAdGroup(${JSON.stringify(g).replace(/'/g,"&#39;")})'>${t('add')}</button>
-            </div>`).join(''):`<p style="color:var(--muted);">${t('ad_not_found')}</p>`;
-        }catch(e){ c.innerHTML=`<p style="color:var(--danger);">${escapeHtml(e.message)}</p>`; } }
-    document.getElementById('adGroupSearchBtn').onclick=searchAdGroups;
-    document.getElementById('adGroupSearch').addEventListener('keypress',e=>{ if(e.key==='Enter'){ e.preventDefault(); searchAdGroups(); } });
-
-    async function addAdGroup(g){ try{ await apiFetch('/api/web/groups/ad',{method:'POST',body:JSON.stringify({name:g.name,dn:g.dn,sid:g.sid})});
-        showToast(t('group_created')); await loadGroups(); searchAdGroups(); }
-        catch(e){ showToast(e.message,true); } }
-
     // ================= МОДАЛКИ ПОЛЬЗОВАТЕЛЯ =================
     const userModal=document.getElementById('userModal');
     document.getElementById('addUserBtn').onclick=()=>{ userModal.classList.add('active'); };
@@ -155,7 +58,7 @@
         const r=await fetch(`/api/users/${currentUserId}/password`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_password:newPasswordField.value})});
         if(r.ok){ showToast(t('password_changed')); passwordModal.classList.remove('active'); } else showToast(t('error'),true); });
 
-    window.onclick=e=>{ [userModal,passwordModal,groupModal,adGroupModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
+    window.onclick=e=>{ [userModal,passwordModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
 
-    (async()=>{ await loadGroups(); await loadUsers(); })();
+    (async()=>{ await loadGroups(); loadUsers(); })();
 </script>
