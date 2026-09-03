@@ -192,10 +192,12 @@ def init_db():
         # Создаем таблицу users
         # Права администратора задаются членством во встроенной группе
         # Administrators — колонки ролей нет.
+        # username БЕЗ ограничения уникальности: локальный и доменный
+        # пользователи с одним именем различаются по auth_source и id.
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
-                username TEXT UNIQUE NOT NULL,
+                username TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 email TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -415,6 +417,14 @@ def init_db():
         release_db_connection(conn)
         db_logger.info("Database tables created successfully")
 
+        # Миграция: раньше username был уникальным. Теперь локальный и
+        # доменный пользователи с одним именем сосуществуют (различаются по
+        # auth_source и id) — снимаем ограничение (только для старых баз).
+        try:
+            execute_query('ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key')
+        except Exception:
+            pass
+
         # Группа по умолчанию (id=1), на неё ссылаются существующие пользователи
         default_group = execute_query('SELECT id FROM groups WHERE id = 1', fetch_one=True)
         if not default_group:
@@ -480,7 +490,10 @@ def init_db():
                 WHERE group_id = %s AND member_type = 'user'
             """, (admins_group['id'],), fetch_one=True)
             if not has_user_member:
-                admin = get_user_by_username('admin')
+                admin = execute_query("""
+                    SELECT * FROM users WHERE username = 'admin'
+                    ORDER BY (auth_source <> 'local') NULLS LAST, id
+                """, fetch_one=True)
                 if admin:
                     execute_query("""
                         INSERT INTO group_members (group_id, member_type, member_id)
@@ -677,7 +690,9 @@ def get_all_users():
     )
 
 def create_user(username, password, email=None, group_id=1):
-    existing = get_user_by_username(username)
+    existing = execute_query("""
+        SELECT id FROM users WHERE username = %s AND auth_source = 'local'
+    """, (username,), fetch_one=True)
     if existing:
         return False, 'Username already exists'
 

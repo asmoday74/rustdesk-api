@@ -11,15 +11,16 @@ from modules.database import execute_query, get_user_by_username as get_user
 
 def provision_ldap_user(info):
     """Создаёт/обновляет локальную запись доменного пользователя.
-    Возвращает пользователя или None при конфликте с локальной записью."""
+    Ищет только среди записей auth_source='ldap': локальный пользователь с
+    тем же именем может существовать параллельно (различаются по источнику)."""
     from modules import groups as gr
     username = info.get('username') or ''
     if not username:
         return None
-    user = get_user(username)
+    user = execute_query(
+        "SELECT * FROM users WHERE username = %s AND auth_source = 'ldap'",
+        (username,), fetch_one=True)
     if user:
-        if user.get('auth_source', 'local') != 'ldap':
-            return None
         if info.get('dn') and info['dn'] != user.get('ldap_dn'):
             execute_query('UPDATE users SET ldap_dn = %s WHERE id = %s',
                           (info['dn'], user['id']))
@@ -33,7 +34,9 @@ def provision_ldap_user(info):
             VALUES (%s, %s, %s, %s, 'ldap', %s, %s)
         """, (username, secrets.token_hex(32), info.get('email') or None,
               primary_gid, info.get('dn') or '', info.get('display_name') or ''))
-        user = get_user(username)
+        user = execute_query(
+            "SELECT * FROM users WHERE username = %s AND auth_source = 'ldap'",
+            (username,), fetch_one=True)
         if user and users_group:
             gr.add_member(users_group['id'], gr.MEMBER_USER, user['id'])
     if user:
@@ -62,10 +65,11 @@ def init_auth_routes(app):
                 if not user:
                     return jsonify({'error': 'Invalid credentials'}), 401
             else:
-                # Локальный вход
-                user = get_user(username)
-                if user and user.get('auth_source', 'local') != 'local':
-                    return jsonify({'error': 'Invalid credentials'}), 401
+                # Локальный вход: ищем только среди локальных пользователей —
+                # доменный с тем же именем входит через user@domain / DOMAIN\User
+                user = execute_query(
+                    "SELECT * FROM users WHERE username = %s AND auth_source = 'local'",
+                    (username,), fetch_one=True)
                 if not (user and verify_password(user.get('password_hash'), password)):
                     return jsonify({'error': 'Invalid credentials'}), 401
 
@@ -220,7 +224,11 @@ def init_auth_routes(app):
             if username != user['username']:
                 if is_ldap:
                     return jsonify({'error': 'Domain username cannot be changed'}), 400
-                if get_user(username):
+                taken = execute_query("""
+                    SELECT id FROM users
+                    WHERE username = %s AND auth_source = 'local' AND id <> %s
+                """, (username, user_id), fetch_one=True)
+                if taken:
                     return jsonify({'error': 'Username already exists'}), 400
                 sets.append('username = %s')
                 params.append(username)
@@ -325,8 +333,13 @@ def init_auth_routes(app):
         found = ldap_auth.search_users(request.args.get('search', ''))
         if found is None:
             return jsonify({'error': 'LDAPError'}), 500
-        added = {(u.get('username') or '').lower() for u in get_all_users()}
-        return jsonify([u for u in found if u['username'].lower() not in added])
+        # Скрываем только уже добавленных из AD; локальный пользователь с тем
+        # же именем не мешает — записи сосуществуют (разные auth_source и id).
+        users = get_all_users()
+        ldap_added = {(u.get('username') or '').lower() for u in users
+                      if (u.get('auth_source') or 'local') != 'local'}
+        return jsonify([u for u in found
+                        if (u.get('username') or '').lower() not in ldap_added])
 
     @app.route('/api/web/ad/users', methods=['POST'])
     def web_ad_user_add():
@@ -345,11 +358,14 @@ def init_auth_routes(app):
         info = ldap_auth.lookup_user(login)
         if not info:
             return jsonify({'error': 'UserNotFoundInAD'}), 404
-        if get_user(info['username']):
+        existing = execute_query(
+            "SELECT id FROM users WHERE username = %s AND auth_source = 'ldap'",
+            (info['username'],), fetch_one=True)
+        if existing:
             return jsonify({'error': 'UserAlreadyExists'}), 400
         user = provision_ldap_user(info)
         if not user:
-            return jsonify({'error': 'UserAlreadyExists'}), 400
+            return jsonify({'error': 'OperationFailed'}), 400
         add_audit_log(session.get('user_id'), 'ADD_AD_USER', user['username'],
                       f"AD user added (dn={info.get('dn', '')})", request.remote_addr)
         return jsonify({'message': 'AD user added', 'id': user['id']}), 201

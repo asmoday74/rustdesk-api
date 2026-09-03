@@ -729,7 +729,7 @@ check('ldap user cannot login via local form', r.status_code == 401)
 r = client.post('/api/login', json={'username': 'unknown@asmnet.ru', 'password': 'LdapPass1', 'uuid': 'x'})
 check('unknown domain user rejected', r.status_code == 401)
 r = client.post('/api/login', json={'username': 'admin@asmnet.ru', 'password': 'admin', 'uuid': 'x'})
-check('local user name collision rejected', r.status_code == 401)
+check('domain login for nonexistent ad user rejected', r.status_code == 401)
 
 jc = flask_app.test_client()
 r = jc.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1'})
@@ -870,5 +870,51 @@ r = anon.get('/api/web/ad/users?search=aduser')
 check('added ad user excluded from search', r.get_json() == [])
 r = anon.post('/api/web/ad/users', json={'username': 'ghost'})
 check('unknown ad user rejected', r.status_code == 404)
+
+# Тёзки: локальный пользователь и пользователь AD с одним логином сосуществуют
+cu('dupuser', 'pass1234')
+ldap_mod.search_users = lambda q: ([{'username': 'dupuser', 'display_name': 'Dup User',
+                                     'email': 'dup@asmnet.ru',
+                                     'dn': 'CN=Dup User,DC=asmnet,DC=ru'}] if q else [])
+
+
+def fake_lookup2(u):
+    login = (u.split('@')[0].split('\\')[-1]).lower()
+    if login == 'dupuser':
+        return {'dn': 'CN=Dup User,DC=asmnet,DC=ru', 'username': 'dupuser',
+                'display_name': 'Dup User', 'email': 'dup@asmnet.ru',
+                'group_sids': []}
+    return fake_lookup(u)
+
+
+ldap_mod.lookup_user = fake_lookup2
+r = anon.get('/api/web/ad/users?search=dup')
+rows = r.get_json()
+check('ad user with local namesake is visible', len(rows) == 1 and not rows[0].get('conflict'))
+r = anon.post('/api/web/ad/users', json={'username': 'dupuser'})
+check('ad user with local namesake added', r.status_code == 201)
+cnt = fake_execute_query("SELECT COUNT(*) AS c FROM users WHERE username='dupuser'", fetch_one=True)
+check('both namesakes stored', cnt['c'] == 2)
+
+
+def fake_auth3(u, p):
+    login = (u.split('@')[0].split('\\')[-1]).lower()
+    if login == 'dupuser' and p == 'DupPass1':
+        return {'dn': 'CN=Dup User,DC=asmnet,DC=ru', 'username': 'dupuser',
+                'display_name': 'Dup User', 'email': 'dup@asmnet.ru',
+                'group_sids': []}
+    return fake_auth(u, p)
+
+
+ldap_mod.authenticate = fake_auth3
+cc2 = flask_app.test_client()
+r = cc2.post('/api/login', json={'username': 'dupuser', 'password': 'pass1234'})
+check('local namesake login still works', r.status_code == 200)
+r = client.post('/api/login', json={'username': 'dupuser@asmnet.ru', 'password': 'DupPass1',
+                                    'uuid': 'uuid-dup', 'id': 'dev-dup'})
+check('domain namesake login works', r.status_code == 200
+      and r.get_json()['user']['name'] == 'dupuser')
+r = anon.post('/api/users', json={'username': 'dupuser', 'password': '12345'})
+check('duplicate local username still rejected', r.status_code == 400)
 
 print(f'\nALL {passed} CHECKS PASSED')

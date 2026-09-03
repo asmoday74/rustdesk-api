@@ -109,8 +109,12 @@ def get_all_users():
     return users
 
 def create_user(username, password, email=None, group_id=1, nickname=''):
-    from modules.database import execute_query, get_user_by_username
-    existing = get_user_by_username(username)
+    from modules.database import execute_query
+    # Уникальность гарантируется среди локальных пользователей; доменный
+    # пользователь с тем же именем может существовать параллельно.
+    existing = execute_query("""
+        SELECT id FROM users WHERE username = %s AND auth_source = 'local'
+    """, (username,), fetch_one=True)
     if existing:
         return False, 'Username already exists'
 
