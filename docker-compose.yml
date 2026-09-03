@@ -39,6 +39,10 @@ services:
       - SECRET_KEY=your-secret-key-change-this-in-production
       # Шаблон оформления: rustdesk (тёмная/светлая схема) или sve (прежний)
       - TEMPLATE=rustdesk
+      # Схема URI для кнопки «Подключить» (<схема>://connection/new/<id>).
+      # Для кастомного клиента укажите имя приложения из генератора в нижнем
+      # регистре (например, svedesk). По умолчанию — rustdesk.
+      # - RD_URI_SCHEME=rustdesk
       # ===== LDAP / Active Directory (доменная аутентификация) =====
       # Вход по user@domain.name или DOMAIN\User. По умолчанию выключено.
       # - LDAP_ENABLED=1

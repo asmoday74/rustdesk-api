@@ -71,7 +71,7 @@
                 ${canFull()?`<button class="btn btn-danger btn-sm" data-i18n-title="delete" onclick="deletePeer('${escapeHtml(p.id)}')"><i class="fas fa-trash"></i></button>`:''}
             </div></td></tr>`; }).join('');
         applyI18n(tb); }
-    function connectPeer(id){ if(id) window.location.href=`rustdesk://connection/new/${id}`; }
+    function connectPeer(id){ if(id) window.location.href=`{{ uri_scheme }}://connection/new/${id}`; }
 
     function renderPeerTags(selected){ const c=document.getElementById('peerTagsList');
         if(!currentTags.length){ c.innerHTML=`<span style="color:var(--muted);font-size:.8rem;">${t('no_tags')}</span>`; return; }

@@ -62,7 +62,7 @@
         toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),3000);
     }
 
-    function connectRustDesk(id, name){ if(!id){showToast(t('no_id'),true);return;} showToast(t('connecting_to',{name:name||id}),false); window.location.href=`rustdesk://connection/new/${id}`; }
+    function connectRustDesk(id, name){ if(!id){showToast(t('no_id'),true);return;} showToast(t('connecting_to',{name:name||id}),false); window.location.href=`{{ uri_scheme }}://connection/new/${id}`; }
 
     function formatDate(d){ if(!d) return t('never'); try{ const date=new Date(d); if(isNaN(date))return t('never');
         const diff=(new Date()-date)/1000;

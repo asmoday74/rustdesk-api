@@ -40,6 +40,7 @@ docker compose up -d
 | `SECRET_KEY` | секрет Flask (сессии веб-портала) |
 | `TEMPLATE` | дизайн портала: `rustdesk` (по умолчанию) или `sve` |
 | `CLIENTGEN_DIR` | каталог артефактов сборок (по умолчанию `/data/clientgen`) |
+| `RD_URI_SCHEME` | схема URI кнопки «Подключить» (по умолчанию `rustdesk`); для кастомного клиента — имя приложения в нижнем регистре |
 
 ### LDAP / Active Directory (доменная аутентификация)
 

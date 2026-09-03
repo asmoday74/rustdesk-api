@@ -28,12 +28,20 @@ def get_design():
         d = 'rustdesk'
     return d
 
+# Схема URI для запуска клиента по ссылкам вида <схема>://connection/new/<id>.
+# Для кастомных клиентов схема = имя приложения в нижнем регистре.
+def get_uri_scheme():
+    import re
+    s = re.sub(r'[^a-zA-Z0-9+.-]', '', os.environ.get('RD_URI_SCHEME', 'rustdesk')).lower()
+    return s or 'rustdesk'
+
 def page_ctx(active):
     return {
         'theme': 'dark',
         'is_admin': session.get('role') == 'admin',
         'username': session.get('username', ''),
         'active': active,
+        'uri_scheme': get_uri_scheme(),
     }
 
 # ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========

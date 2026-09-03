@@ -484,6 +484,13 @@ check('/ab redirects unauthenticated', r.status_code in (301, 302)
 anon.post('/api/login', json={'username': 'admin', 'password': 'admin'})
 r = anon.get('/ab')
 check('/ab served when authenticated', r.status_code == 200 and b'data-design=' in r.data)
+check('default uri scheme rustdesk', b'rustdesk://connection/new/' in r.data)
+os.environ['RD_URI_SCHEME'] = 'svedesk'
+r = anon.get('/ab')
+check('custom uri scheme applied', b'svedesk://connection/new/' in r.data)
+r = anon.get('/')
+check('custom uri scheme on devices page', b'svedesk://connection/new/' in r.data)
+os.environ.pop('RD_URI_SCHEME', None)
 r = anon.get('/login')
 check('/login renders', r.status_code == 200 and b'data-design=' in r.data)
 
