@@ -957,4 +957,60 @@ check('login renames legacy ldap user to user@domain', bool(jr3))
 os.environ.pop('LDAP_DOMAIN', None)
 os.environ.pop('LDAP_BASE_DN', None)
 
+# ================= ВСЕ AD-ГРУППЫ ПОЛЬЗОВАТЕЛЯ ПРИ ЛОГИНЕ =================
+print('== full ad group sync on login ==')
+
+
+def fake_auth4(u, p):
+    info = fake_auth3(u, p)
+    if info and info.get('sam') == 'jsmith':
+        info = dict(info)
+        info['member_dns'] = ['CN=Отдел разработки,OU=Groups,DC=asmnet,DC=ru',
+                              'CN=AD-Разработчики,OU=Groups,DC=asmnet,DC=ru']
+    return info
+
+
+ldap_mod.authenticate = fake_auth4
+ldap_mod.fetch_groups_info = lambda dns: [
+    {'name': 'Отдел разработки', 'dn': 'CN=Отдел разработки,OU=Groups,DC=asmnet,DC=ru',
+     'sid': 'S-1-5-21-200'},
+    {'name': 'AD-Разработчики', 'dn': 'CN=AD-Разработчики,OU=Groups,DC=asmnet,DC=ru',
+     'sid': 'S-1-5-21-100'},
+] if dns else []
+r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1',
+                                    'uuid': 'uuid-j10', 'id': 'dev-j10'})
+check('login with full group sync', r.status_code == 200)
+ng = fake_execute_query("SELECT * FROM groups WHERE name='Отдел разработки'", fetch_one=True)
+check('unknown ad group auto-created', bool(ng) and ng['source'] == 'ad'
+      and ng['ldap_sid'] == 'S-1-5-21-200')
+jr = fake_execute_query("SELECT * FROM users WHERE username='jsmith@asmnet.ru'", fetch_one=True)
+gm = fake_execute_query("""SELECT g.name FROM group_members gm JOIN groups g ON g.id=gm.group_id
+    WHERE gm.member_type='user' AND gm.member_id=?""", (jr['id'],), fetch_all=True)
+check('all user ad groups synced',
+      sorted(x['name'] for x in gm) == ['AD-Разработчики', 'Users', 'Отдел разработки'])
+
+
+# Группа, пропавшая из memberOf/tokenGroups, снимается с пользователя
+def fake_auth5(u, p):
+    info = fake_auth3(u, p)
+    if info and info.get('sam') == 'jsmith':
+        info = dict(info)
+        info['member_dns'] = ['CN=Отдел разработки,OU=Groups,DC=asmnet,DC=ru']
+        info['group_sids'] = ['S-1-5-21-200']
+    return info
+
+
+ldap_mod.authenticate = fake_auth5
+ldap_mod.fetch_groups_info = lambda dns: [
+    {'name': 'Отдел разработки', 'dn': 'CN=Отдел разработки,OU=Groups,DC=asmnet,DC=ru',
+     'sid': 'S-1-5-21-200'},
+] if dns else []
+r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1',
+                                    'uuid': 'uuid-j11', 'id': 'dev-j11'})
+check('re-login after group changes', r.status_code == 200)
+gm = fake_execute_query("""SELECT g.name FROM group_members gm JOIN groups g ON g.id=gm.group_id
+    WHERE gm.member_type='user' AND gm.member_id=?""", (jr['id'],), fetch_all=True)
+check('stale ad group membership removed',
+      sorted(x['name'] for x in gm) == ['Users', 'Отдел разработки'])
+
 print(f'\nALL {passed} CHECKS PASSED')

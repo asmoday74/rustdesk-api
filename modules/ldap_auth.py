@@ -125,6 +125,13 @@ def _entry_info(entry):
             return str(v) if v else ''
         except Exception:
             return ''
+
+    def attr_list(name):
+        try:
+            vals = entry[name].values
+            return [str(v) for v in vals] if vals else []
+        except Exception:
+            return []
     upn = attr('userPrincipalName')
     sam = attr('sAMAccountName') or upn.split('@')[0]
     # Доменные пользователи всегда хранятся как <sAMAccountName>@<домен из настроек>
@@ -135,6 +142,7 @@ def _entry_info(entry):
         'sam': sam,
         'display_name': attr('displayName'),
         'email': attr('mail') or upn,
+        'member_dns': attr_list('memberOf'),
         'group_sids': [],
     }
 
@@ -164,7 +172,8 @@ def authenticate(username, password):
     if '@' in raw:
         user_filter = f'(|{user_filter}(userPrincipalName={_escape(raw)}))'
     timeout = _timeout()
-    core_attrs = ['sAMAccountName', 'displayName', 'mail', 'userPrincipalName']
+    core_attrs = ['sAMAccountName', 'displayName', 'mail', 'userPrincipalName',
+                  'memberOf']
     try:
         server = _server()
         bind_dn = _env('LDAP_BIND_DN')
@@ -240,7 +249,8 @@ def lookup_user(username):
     if '@' in raw:
         user_filter = f'(|{user_filter}(userPrincipalName={_escape(raw)}))'
     timeout = _timeout()
-    core_attrs = ['sAMAccountName', 'displayName', 'mail', 'userPrincipalName']
+    core_attrs = ['sAMAccountName', 'displayName', 'mail', 'userPrincipalName',
+                  'memberOf']
     try:
         server = _server()
         svc = ldap3.Connection(server, user=bind_dn, password=_env('LDAP_BIND_PASSWORD'),
@@ -330,6 +340,56 @@ def _fetch_token_groups(conn, dn):
     except Exception as e:
         _log.warning('tokenGroups unavailable for %s: %s: %s', dn, type(e).__name__, e)
     return []
+
+
+GROUP_FETCH_CHUNK = 50
+
+
+def fetch_groups_info(group_dns):
+    """Читает атрибуты указанных групп AD (для автосоздания в системе).
+    Возвращает список {name, dn, sid}; при ошибке/пустом списке — []."""
+    dns = [d for d in (group_dns or []) if d]
+    if not dns or not is_enabled():
+        return []
+    bind_dn = _env('LDAP_BIND_DN')
+    if not bind_dn:
+        return []
+    try:
+        import ldap3
+    except ImportError:
+        return []
+    res = []
+    try:
+        server = _server()
+        conn = ldap3.Connection(server, user=bind_dn, password=_env('LDAP_BIND_PASSWORD'),
+                                auto_bind=True, receive_timeout=_timeout())
+        try:
+            for i in range(0, len(dns), GROUP_FETCH_CHUNK):
+                chunk = dns[i:i + GROUP_FETCH_CHUNK]
+                flt = '(|' + ''.join('(distinguishedName=%s)' % _escape(d) for d in chunk) + ')'
+                conn.search(_env('LDAP_BASE_DN'), flt, search_scope=ldap3.SUBTREE,
+                            attributes=['name', 'sAMAccountName', 'objectSid'])
+                for e in conn.entries:
+                    def gattr(nm):
+                        try:
+                            v = e[nm].value
+                            return str(v) if v else ''
+                        except Exception:
+                            return ''
+                    name = gattr('name') or gattr('sAMAccountName')
+                    if not name:
+                        continue
+                    sid = ''
+                    try:
+                        sid = _sid_to_string(e['objectSid'].raw_values[0])
+                    except Exception:
+                        pass
+                    res.append({'name': name, 'dn': e.entry_dn, 'sid': sid})
+        finally:
+            conn.unbind()
+    except Exception as e:
+        _log.error('fetch_groups_info: LDAP error: %s: %s', type(e).__name__, e)
+    return res
 
 
 def search_groups(query):

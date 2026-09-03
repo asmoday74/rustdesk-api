@@ -287,3 +287,19 @@ def sync_ad_memberships(user_id, group_sids):
         add_member(gid, MEMBER_USER, user_id)
     for gid in current_ids - wanted:
         remove_member(gid, MEMBER_USER, user_id)
+
+
+def sync_ad_memberships_by_ids(user_id, group_ids):
+    """Устанавливает членство пользователя в AD-группах ровно по заданному
+    набору id групп (лишние членства в группах source='ad' снимаются)."""
+    wanted = set(group_ids or ())
+    current = execute_query("""
+        SELECT gm.group_id FROM group_members gm
+        JOIN groups g ON g.id = gm.group_id
+        WHERE gm.member_type = %s AND gm.member_id = %s AND g.source = %s
+    """, (MEMBER_USER, user_id, GROUP_SOURCE_AD), fetch_all=True) or []
+    current_ids = {r['group_id'] for r in current}
+    for gid in wanted - current_ids:
+        add_member(gid, MEMBER_USER, user_id)
+    for gid in current_ids - wanted:
+        remove_member(gid, MEMBER_USER, user_id)

@@ -9,6 +9,41 @@ from modules.auth import (
 from modules.database import execute_query, get_user_by_username as get_user
 
 
+def sync_user_ad_groups(user, info):
+    """Синхронизирует ВСЕ AD-группы пользователя при входе.
+
+    Источники:
+    - memberOf — прямые группы пользователя; неизвестные системе группы
+      создаются автоматически (source='ad', имя/DN/SID из каталога);
+    - tokenGroups — SID известных системе групп (поддерживает вложенность
+      для групп, добавленных вручную).
+    Членства в AD-группах приводятся ровно к этому набору."""
+    from modules import ldap_auth, groups as gr
+    wanted_ids = set()
+    # 1. Прямые группы из memberOf — автосоздание неизвестных
+    for g in ldap_auth.fetch_groups_info(info.get('member_dns') or []):
+        row = execute_query(
+            "SELECT id FROM groups WHERE source = 'ad' AND ldap_dn = %s",
+            (g['dn'],), fetch_one=True)
+        if row:
+            wanted_ids.add(row['id'])
+            continue
+        gid = gr.create_group(g['name'], source=gr.GROUP_SOURCE_AD,
+                              ldap_dn=g['dn'], ldap_sid=g.get('sid') or '')
+        if gid:
+            wanted_ids.add(gid)
+    # 2. Уже известные системе группы по SID из tokenGroups
+    sids = set(info.get('group_sids') or ())
+    if sids:
+        ad_groups = execute_query(
+            "SELECT id, ldap_sid FROM groups WHERE source = 'ad' AND ldap_sid <> ''",
+            fetch_all=True) or []
+        for row in ad_groups:
+            if row['ldap_sid'] in sids:
+                wanted_ids.add(row['id'])
+    gr.sync_ad_memberships_by_ids(user['id'], wanted_ids)
+
+
 def provision_ldap_user(info):
     """Создаёт/обновляет запись доменного пользователя.
     Доменные пользователи хранятся с доменом (user@example.com); локальный
@@ -51,7 +86,7 @@ def provision_ldap_user(info):
         if user and users_group:
             gr.add_member(users_group['id'], gr.MEMBER_USER, user['id'])
     if user:
-        gr.sync_ad_memberships(user['id'], info.get('group_sids') or [])
+        sync_user_ad_groups(user, info)
     return user
 
 
