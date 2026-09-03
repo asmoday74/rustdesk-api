@@ -725,8 +725,12 @@ jobs:
       - name: Build appimage package
         shell: bash
         run: |
-          sed -ie "s|rustdesk|${{ env.appname }}|g" appimage/*
-          mv appimage/rustdesk.deb "appimage/${{ env.filename }}.deb"
+          # Рецепт ожидает <appname>.deb после подстановки имени. Для дефолтного
+          # имени ничего не переименовываем (иначе mv упадёт на том же файле).
+          if [ "${{ env.appname }}" != "rustdesk" ]; then
+            sed -ie "s|rustdesk|${{ env.appname }}|g" appimage/*.yml
+            mv appimage/rustdesk.deb "appimage/${{ env.appname }}.deb"
+          fi
 
            # install libarchive-tools for bsdtar command used in AppImageBuilder.yml
           sudo apt-get update -y
@@ -850,9 +854,17 @@ jobs:
             flatpak --user remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
             # package
             pushd flatpak
+            if [ "${{ env.appname }}" != "rustdesk" ]; then
+              # Кастомный deb собран с путями <appname> (usr/share/<appname>/,
+              # <appname>.desktop и т.д.) — подгоняем манифест и файлы.
+              sed -i "s|rustdesk|${{ env.appname }}|g" rustdesk.json
+              sed -i "s|rustdesk|${{ env.appname }}|g" com.rustdesk.RustDesk.metainfo.xml
+              mv rustdesk.deb ${{ env.appname }}.deb
+              mv com.rustdesk.RustDesk.metainfo.xml com.${{ env.appname }}.RustDesk.metainfo.xml
+            fi
             git clone https://github.com/flathub/shared-modules.git --depth=1
             flatpak-builder --user --install-deps-from=flathub -y --force-clean --repo=repo ./build ./rustdesk.json
-            flatpak build-bundle ./repo ${{ env.filename }}-${{ matrix.job.arch }}.flatpak com.rustdesk.RustDesk
+            flatpak build-bundle ./repo ${{ env.filename }}-${{ matrix.job.arch }}.flatpak com.${{ env.appname }}.RustDesk
 
       - name: send file to rdgen server
         if: ${{ env.rdgen == 'true' }}
