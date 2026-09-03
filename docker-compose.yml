@@ -48,6 +48,7 @@ services:
       # - LDAP_ENABLED=1
       # - LDAP_SERVER=ldap://dc.domain.name:389      # или ldaps://dc.domain.name:636
       # - LDAP_BASE_DN=DC=domain,DC=name
+      # - LDAP_DOMAIN=domain.name                    # домен хранимых имён (user@домен); по умолчанию — из BASE_DN
       # - LDAP_BIND_DN=CN=svc_rustdesk,OU=Service,DC=domain,DC=name
       # - LDAP_BIND_PASSWORD=change-me
       # - LDAP_USER_FILTER=(|(sAMAccountName={login})(userPrincipalName={login}))

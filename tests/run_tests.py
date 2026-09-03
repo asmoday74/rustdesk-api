@@ -685,7 +685,8 @@ ldap_mod.search_groups = lambda q: [{'name': 'AD-Разработчики',
 def fake_auth(u, p):
     login = (u.split('@')[0].split('\\')[-1]).lower()
     if login == 'jsmith' and p == 'LdapPass1':
-        return {'dn': 'CN=John Smith,OU=Users,DC=asmnet,DC=ru', 'username': 'jsmith',
+        return {'dn': 'CN=John Smith,OU=Users,DC=asmnet,DC=ru',
+                'username': 'jsmith@asmnet.ru', 'sam': 'jsmith',
                 'display_name': 'John Smith', 'email': 'jsmith@asmnet.ru',
                 'group_sids': ['S-1-5-21-100']}
     return None
@@ -705,10 +706,10 @@ check('already added ad group excluded', r.get_json() == [])
 r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1',
                                     'uuid': 'uuid-j1', 'id': 'dev-j1'})
 check('ldap client login (user@domain)', r.status_code == 200 and r.get_json().get('access_token'))
-check('ldap user payload', r.get_json()['user']['name'] == 'jsmith'
+check('ldap user payload', r.get_json()['user']['name'] == 'jsmith@asmnet.ru'
       and r.get_json()['user']['is_admin'] is False)
 HJ = {'Authorization': 'Bearer ' + r.get_json()['access_token']}
-jr = fake_execute_query("SELECT * FROM users WHERE username='jsmith'", fetch_one=True)
+jr = fake_execute_query("SELECT * FROM users WHERE username='jsmith@asmnet.ru'", fetch_one=True)
 check('ldap user provisioned', bool(jr) and jr['auth_source'] == 'ldap' and jr['group_id'] == users_gid)
 check('ldap dn stored', jr['ldap_dn'] == 'CN=John Smith,OU=Users,DC=asmnet,DC=ru')
 gm = fake_execute_query("""SELECT gm.member_id, g.name FROM group_members gm
@@ -717,7 +718,7 @@ gm = fake_execute_query("""SELECT gm.member_id, g.name FROM group_members gm
 check('ldap user in Users and AD group',
       sorted(x['name'] for x in gm) == ['AD-Разработчики', 'Users'])
 r = client.get('/api/user/info', headers=HJ)
-check('ldap token works', r.status_code == 200 and r.get_json()['name'] == 'jsmith')
+check('ldap token works', r.status_code == 200 and r.get_json()['name'] == 'jsmith@asmnet.ru')
 
 r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'wrong', 'uuid': 'x'})
 check('ldap wrong password rejected', r.status_code == 401)
@@ -803,7 +804,7 @@ r = client.post('/api/login', json={'username': 'bobby', 'password': 'pass1234',
 check('login with new username', r.status_code == 200)
 r = anon.put(f'/api/users/{bob_id}', json={'username': 'carol'})
 check('rename to existing username rejected', r.status_code == 400)
-jr = fake_execute_query("SELECT * FROM users WHERE username='jsmith'", fetch_one=True)
+jr = fake_execute_query("SELECT * FROM users WHERE username='jsmith@asmnet.ru'", fetch_one=True)
 r = anon.put(f"/api/users/{jr['id']}", json={'username': 'jsmith2'})
 check('ldap username change rejected', r.status_code == 400)
 r = anon.put(f"/api/users/{jr['id']}", json={'nickname': 'John D.', 'email': 'j@asmnet.ru'})
@@ -837,7 +838,7 @@ check('last admin cannot be removed via user endpoint', r.status_code == 400)
 
 # ================= ДОБАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ ИЗ AD =================
 print('== add AD user ==')
-ldap_mod.search_users = lambda q: ([{'username': 'aduser1', 'display_name': 'AD User One',
+ldap_mod.search_users = lambda q: ([{'username': 'aduser1@asmnet.ru', 'display_name': 'AD User One',
                                      'email': 'aduser1@asmnet.ru',
                                      'dn': 'CN=AD User One,OU=Users,DC=asmnet,DC=ru'}] if q else [])
 
@@ -845,7 +846,8 @@ ldap_mod.search_users = lambda q: ([{'username': 'aduser1', 'display_name': 'AD 
 def fake_lookup(u):
     login = (u.split('@')[0].split('\\')[-1]).lower()
     if login == 'aduser1':
-        return {'dn': 'CN=AD User One,OU=Users,DC=asmnet,DC=ru', 'username': 'aduser1',
+        return {'dn': 'CN=AD User One,OU=Users,DC=asmnet,DC=ru',
+                'username': 'aduser1@asmnet.ru', 'sam': 'aduser1',
                 'display_name': 'AD User One', 'email': 'aduser1@asmnet.ru',
                 'group_sids': ['S-1-5-21-100']}
     return None
@@ -855,25 +857,25 @@ ldap_mod.lookup_user = fake_lookup
 
 r = anon.get('/api/web/ad/users?search=aduser')
 check('ad user search', r.status_code == 200 and len(r.get_json()) == 1)
-r = anon.post('/api/web/ad/users', json={'username': 'aduser1'})
+r = anon.post('/api/web/ad/users', json={'username': 'aduser1@asmnet.ru'})
 check('ad user added', r.status_code == 201)
-au = fake_execute_query("SELECT * FROM users WHERE username='aduser1'", fetch_one=True)
+au = fake_execute_query("SELECT * FROM users WHERE username='aduser1@asmnet.ru'", fetch_one=True)
 check('ad user provisioned', bool(au) and au['auth_source'] == 'ldap'
       and au['group_id'] == users_gid and au['nickname'] == 'AD User One')
 gm = fake_execute_query("""SELECT g.name FROM group_members gm JOIN groups g ON g.id=gm.group_id
     WHERE gm.member_type='user' AND gm.member_id=?""", (au['id'],), fetch_all=True)
 check('ad user memberships synced (Users + AD group)',
       sorted(x['name'] for x in gm) == ['AD-Разработчики', 'Users'])
-r = anon.post('/api/web/ad/users', json={'username': 'aduser1'})
+r = anon.post('/api/web/ad/users', json={'username': 'aduser1@asmnet.ru'})
 check('duplicate ad user rejected', r.status_code == 400)
 r = anon.get('/api/web/ad/users?search=aduser')
 check('added ad user excluded from search', r.get_json() == [])
 r = anon.post('/api/web/ad/users', json={'username': 'ghost'})
 check('unknown ad user rejected', r.status_code == 404)
 
-# Тёзки: локальный пользователь и пользователь AD с одним логином сосуществуют
+# Локальный тёзка: доменный пользователь хранится с доменом, имена не конфликтуют
 cu('dupuser', 'pass1234')
-ldap_mod.search_users = lambda q: ([{'username': 'dupuser', 'display_name': 'Dup User',
+ldap_mod.search_users = lambda q: ([{'username': 'dupuser@asmnet.ru', 'display_name': 'Dup User',
                                      'email': 'dup@asmnet.ru',
                                      'dn': 'CN=Dup User,DC=asmnet,DC=ru'}] if q else [])
 
@@ -881,7 +883,8 @@ ldap_mod.search_users = lambda q: ([{'username': 'dupuser', 'display_name': 'Dup
 def fake_lookup2(u):
     login = (u.split('@')[0].split('\\')[-1]).lower()
     if login == 'dupuser':
-        return {'dn': 'CN=Dup User,DC=asmnet,DC=ru', 'username': 'dupuser',
+        return {'dn': 'CN=Dup User,DC=asmnet,DC=ru',
+                'username': 'dupuser@asmnet.ru', 'sam': 'dupuser',
                 'display_name': 'Dup User', 'email': 'dup@asmnet.ru',
                 'group_sids': []}
     return fake_lookup(u)
@@ -890,17 +893,19 @@ def fake_lookup2(u):
 ldap_mod.lookup_user = fake_lookup2
 r = anon.get('/api/web/ad/users?search=dup')
 rows = r.get_json()
-check('ad user with local namesake is visible', len(rows) == 1 and not rows[0].get('conflict'))
-r = anon.post('/api/web/ad/users', json={'username': 'dupuser'})
+check('ad user with local namesake is visible', len(rows) == 1)
+r = anon.post('/api/web/ad/users', json={'username': 'dupuser@asmnet.ru'})
 check('ad user with local namesake added', r.status_code == 201)
-cnt = fake_execute_query("SELECT COUNT(*) AS c FROM users WHERE username='dupuser'", fetch_one=True)
+cnt = fake_execute_query("""SELECT COUNT(*) AS c FROM users
+    WHERE username IN ('dupuser', 'dupuser@asmnet.ru')""", fetch_one=True)
 check('both namesakes stored', cnt['c'] == 2)
 
 
 def fake_auth3(u, p):
     login = (u.split('@')[0].split('\\')[-1]).lower()
     if login == 'dupuser' and p == 'DupPass1':
-        return {'dn': 'CN=Dup User,DC=asmnet,DC=ru', 'username': 'dupuser',
+        return {'dn': 'CN=Dup User,DC=asmnet,DC=ru',
+                'username': 'dupuser@asmnet.ru', 'sam': 'dupuser',
                 'display_name': 'Dup User', 'email': 'dup@asmnet.ru',
                 'group_sids': []}
     return fake_auth(u, p)
@@ -910,11 +915,46 @@ ldap_mod.authenticate = fake_auth3
 cc2 = flask_app.test_client()
 r = cc2.post('/api/login', json={'username': 'dupuser', 'password': 'pass1234'})
 check('local namesake login still works', r.status_code == 200)
-r = client.post('/api/login', json={'username': 'dupuser@asmnet.ru', 'password': 'DupPass1',
+r = client.post('/api/login', json={'username': 'EXAMPLE\\dupuser', 'password': 'DupPass1',
                                     'uuid': 'uuid-dup', 'id': 'dev-dup'})
-check('domain namesake login works', r.status_code == 200
-      and r.get_json()['user']['name'] == 'dupuser')
+check('domain namesake login (EXAMPLE\\user) works', r.status_code == 200
+      and r.get_json()['user']['name'] == 'dupuser@asmnet.ru')
 r = anon.post('/api/users', json={'username': 'dupuser', 'password': '12345'})
-check('duplicate local username still rejected', r.status_code == 400)
+check('duplicate local username rejected', r.status_code == 400)
+
+# ================= СТРОГАЯ УНИКАЛЬНОСТЬ И ЗАПРЕТ '@' =================
+print('== strict username uniqueness ==')
+r = anon.post('/api/users', json={'username': 'bad@name', 'password': '12345'})
+check('local username with @ rejected', r.status_code == 400)
+r = anon.post('/api/users', json={'username': 'DOM\\name', 'password': '12345'})
+check('local username with backslash rejected', r.status_code == 400)
+try:
+    fake_execute_query("INSERT INTO users (username, password_hash) VALUES ('admin', 'x')")
+    dup_insert_ok = True
+except Exception:
+    dup_insert_ok = False
+check('strict username uniqueness enforced in db', not dup_insert_ok)
+
+# ================= МИГРАЦИЯ СТАРЫХ ДОМЕННЫХ ИМЁН =================
+print('== legacy ldap username migration ==')
+os.environ['LDAP_BASE_DN'] = 'DC=asmnet,DC=ru'
+check('domain derived from LDAP_BASE_DN', ldap_mod.ldap_domain() == 'asmnet.ru')
+os.environ['LDAP_DOMAIN'] = 'corp.example'
+check('LDAP_DOMAIN overrides derived domain', ldap_mod.ldap_domain() == 'corp.example')
+os.environ['LDAP_DOMAIN'] = 'asmnet.ru'
+# init_db переименовывает старые записи ldap-пользователей без домена
+fake_execute_query("UPDATE users SET username='jsmith' WHERE username='jsmith@asmnet.ru'")
+check('re-init_db with legacy names', database.init_db())
+jr2 = fake_execute_query("SELECT * FROM users WHERE username='jsmith@asmnet.ru'", fetch_one=True)
+check('init_db renames legacy ldap usernames', bool(jr2))
+# То же самое делает логин, если запись ещё не переименована
+fake_execute_query("UPDATE users SET username='jsmith' WHERE username='jsmith@asmnet.ru'")
+r = client.post('/api/login', json={'username': 'jsmith@asmnet.ru', 'password': 'LdapPass1',
+                                    'uuid': 'uuid-j9', 'id': 'dev-j9'})
+check('legacy ldap user login ok', r.status_code == 200)
+jr3 = fake_execute_query("SELECT * FROM users WHERE username='jsmith@asmnet.ru'", fetch_one=True)
+check('login renames legacy ldap user to user@domain', bool(jr3))
+os.environ.pop('LDAP_DOMAIN', None)
+os.environ.pop('LDAP_BASE_DN', None)
 
 print(f'\nALL {passed} CHECKS PASSED')

@@ -110,6 +110,10 @@ def get_all_users():
 
 def create_user(username, password, email=None, group_id=1, nickname=''):
     from modules.database import execute_query
+    # '@' и '\\' в локальном логине запрещены: такие форматы зарезервированы
+    # для доменного входа (user@domain / DOMAIN\user).
+    if not username or '@' in username or '\\' in username:
+        return False, 'Username must not contain @ or \\'
     # Уникальность гарантируется среди локальных пользователей; доменный
     # пользователь с тем же именем может существовать параллельно.
     existing = execute_query("""

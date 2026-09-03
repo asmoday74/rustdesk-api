@@ -4,6 +4,8 @@
   LDAP_ENABLED      1 — включить доменную аутентификацию (по умолчанию 0)
   LDAP_SERVER       ldap://dc.domain.name:389 или ldaps://dc.domain.name:636
   LDAP_BASE_DN      база поиска, например DC=domain,DC=name
+  LDAP_DOMAIN       домен для хранения доменных пользователей (user@домен);
+                    по умолчанию выводится из LDAP_BASE_DN
   LDAP_BIND_DN      сервисный аккаунт для поиска пользователей (рекомендуется)
   LDAP_BIND_PASSWORD пароль сервисного аккаунта
   LDAP_USER_FILTER  фильтр поиска пользователя, {login} подставляется;
@@ -14,6 +16,8 @@
 
 Форматы входа: user@domain.name или DOMAIN\\User. Во втором случае префикс
 домена отбрасывается, поиск идёт по sAMAccountName в настроенном каталоге.
+Доменные пользователи хранятся в системе как <sAMAccountName>@<LDAP_DOMAIN>,
+локальным пользователям символы '@' и '\\' в логине запрещены.
 """
 import logging
 import os
@@ -97,6 +101,23 @@ def _group_sids(entry):
     return [s for s in sids if s]
 
 
+def _domain_from_base_dn():
+    """Домен из LDAP_BASE_DN: DC=example,DC=com -> example.com"""
+    parts = []
+    for chunk in _env('LDAP_BASE_DN').split(','):
+        chunk = chunk.strip()
+        if chunk.upper().startswith('DC='):
+            parts.append(chunk[3:])
+    return '.'.join(parts).lower()
+
+
+def ldap_domain():
+    """Домен для хранения доменных пользователей (user@<домен>).
+    Берётся из LDAP_DOMAIN, при отсутствии — выводится из LDAP_BASE_DN."""
+    d = _env('LDAP_DOMAIN')
+    return d.lower() if d else _domain_from_base_dn()
+
+
 def _entry_info(entry):
     def attr(name):
         try:
@@ -104,11 +125,16 @@ def _entry_info(entry):
             return str(v) if v else ''
         except Exception:
             return ''
+    upn = attr('userPrincipalName')
+    sam = attr('sAMAccountName') or upn.split('@')[0]
+    # Доменные пользователи всегда хранятся как <sAMAccountName>@<домен из настроек>
+    username = ('%s@%s' % (sam, ldap_domain())) if sam else ''
     return {
         'dn': entry.entry_dn,
-        'username': attr('sAMAccountName') or attr('userPrincipalName').split('@')[0],
+        'username': username,
+        'sam': sam,
         'display_name': attr('displayName'),
-        'email': attr('mail') or attr('userPrincipalName'),
+        'email': attr('mail') or upn,
         'group_sids': [],
     }
 
@@ -275,13 +301,14 @@ def search_users(query):
                         return str(v) if v else ''
                     except Exception:
                         return ''
-                sam = attr('sAMAccountName') or attr('userPrincipalName').split('@')[0]
+                upn = attr('userPrincipalName')
+                sam = attr('sAMAccountName') or upn.split('@')[0]
                 if not sam:
                     continue
                 res.append({
-                    'username': sam,
+                    'username': '%s@%s' % (sam, ldap_domain()),
                     'display_name': attr('displayName'),
-                    'email': attr('mail') or attr('userPrincipalName'),
+                    'email': attr('mail') or upn,
                     'dn': e.entry_dn,
                 })
             return res

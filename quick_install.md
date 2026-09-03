@@ -54,6 +54,7 @@ docker compose up -d
 | `LDAP_ENABLED` | `1` — включить доменную аутентификацию |
 | `LDAP_SERVER` | `ldap://dc.domain.name:389` или `ldaps://dc.domain.name:636` |
 | `LDAP_BASE_DN` | база поиска, например `DC=domain,DC=name` |
+| `LDAP_DOMAIN` | домен хранимых имён доменных пользователей (`user@домен`); по умолчанию выводится из `LDAP_BASE_DN` |
 | `LDAP_BIND_DN` | сервисный аккаунт для поиска пользователей (рекомендуется) |
 | `LDAP_BIND_PASSWORD` | пароль сервисного аккаунта |
 | `LDAP_USER_FILTER` | фильтр поиска пользователя, подставляется `{login}` |

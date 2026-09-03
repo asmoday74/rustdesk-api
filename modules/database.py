@@ -192,12 +192,12 @@ def init_db():
         # Создаем таблицу users
         # Права администратора задаются членством во встроенной группе
         # Administrators — колонки ролей нет.
-        # username БЕЗ ограничения уникальности: локальный и доменный
-        # пользователи с одним именем различаются по auth_source и id.
+        # Логин уникален строго: доменные пользователи хранятся с доменом
+        # (user@example.com), локальным '@' запрещён — коллизии исключены.
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
-                username TEXT NOT NULL,
+                username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 email TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -417,13 +417,31 @@ def init_db():
         release_db_connection(conn)
         db_logger.info("Database tables created successfully")
 
-        # Миграция: раньше username был уникальным. Теперь локальный и
-        # доменный пользователи с одним именем сосуществуют (различаются по
-        # auth_source и id) — снимаем ограничение (только для старых баз).
+        # Миграция: доменные пользователи хранятся с доменом (user@example.com).
+        # Старые записи без домена переименовываются, затем возвращается
+        # строгая уникальность логина (для баз, где ограничение снималось).
         try:
-            execute_query('ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key')
+            from modules import ldap_auth
+            domain = ldap_auth.ldap_domain()
         except Exception:
-            pass
+            domain = ''
+        if domain:
+            legacy_rows = execute_query("""
+                SELECT id, username FROM users
+                WHERE auth_source = 'ldap' AND username NOT LIKE %s
+            """, ('%@%',), fetch_all=True) or []
+            for row in legacy_rows:
+                new_name = '%s@%s' % (row['username'], domain)
+                taken = execute_query(
+                    'SELECT id FROM users WHERE username = %s', (new_name,), fetch_one=True)
+                if not taken:
+                    execute_query('UPDATE users SET username = %s WHERE id = %s',
+                                  (new_name, row['id']))
+        try:
+            execute_query(
+                'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)')
+        except Exception as e:
+            db_logger.error(f"Cannot enforce unique username index: {e}")
 
         # Группа по умолчанию (id=1), на неё ссылаются существующие пользователи
         default_group = execute_query('SELECT id FROM groups WHERE id = 1', fetch_one=True)
@@ -690,6 +708,8 @@ def get_all_users():
     )
 
 def create_user(username, password, email=None, group_id=1):
+    if not username or '@' in username or '\\' in username:
+        return False, 'Username must not contain @ or \\'
     existing = execute_query("""
         SELECT id FROM users WHERE username = %s AND auth_source = 'local'
     """, (username,), fetch_one=True)

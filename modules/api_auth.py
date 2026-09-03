@@ -10,16 +10,27 @@ from modules.database import execute_query, get_user_by_username as get_user
 
 
 def provision_ldap_user(info):
-    """Создаёт/обновляет локальную запись доменного пользователя.
-    Ищет только среди записей auth_source='ldap': локальный пользователь с
-    тем же именем может существовать параллельно (различаются по источнику)."""
+    """Создаёт/обновляет запись доменного пользователя.
+    Доменные пользователи хранятся с доменом (user@example.com); локальный
+    пользователь с тем же именем без домена может существовать параллельно.
+    Старые записи без домена (по sAMAccountName) переименовываются в UPN."""
     from modules import groups as gr
     username = info.get('username') or ''
+    sam = info.get('sam') or username.split('@')[0]
     if not username:
         return None
     user = execute_query(
         "SELECT * FROM users WHERE username = %s AND auth_source = 'ldap'",
         (username,), fetch_one=True)
+    if not user:
+        # Запись, созданная до перехода на имена с доменом
+        legacy = execute_query(
+            "SELECT * FROM users WHERE username = %s AND auth_source = 'ldap'",
+            (sam,), fetch_one=True)
+        if legacy:
+            execute_query('UPDATE users SET username = %s WHERE id = %s',
+                          (username, legacy['id']))
+            user = legacy
     if user:
         if info.get('dn') and info['dn'] != user.get('ldap_dn'):
             execute_query('UPDATE users SET ldap_dn = %s WHERE id = %s',
@@ -224,6 +235,8 @@ def init_auth_routes(app):
             if username != user['username']:
                 if is_ldap:
                     return jsonify({'error': 'Domain username cannot be changed'}), 400
+                if '@' in username or '\\' in username:
+                    return jsonify({'error': 'Username must not contain @ or \\'}), 400
                 taken = execute_query("""
                     SELECT id FROM users
                     WHERE username = %s AND auth_source = 'local' AND id <> %s
