@@ -191,6 +191,107 @@ def authenticate(username, password):
         return None
 
 
+def lookup_user(username):
+    """Ищет пользователя в каталоге сервисным аккаунтом БЕЗ проверки пароля
+    (для ручного добавления из интерфейса). Возвращает словарь
+    {dn, username, display_name, email, group_sids} или None."""
+    if not is_enabled():
+        return None
+    login = parse_domain_login(username) or (username or '').strip()
+    if not login:
+        return None
+    try:
+        import ldap3
+    except ImportError:
+        return None
+    bind_dn = _env('LDAP_BIND_DN')
+    if not bind_dn:
+        _log.warning('lookup_user: LDAP_BIND_DN is required')
+        return None
+    base = _env('LDAP_BASE_DN')
+    user_filter = _env('LDAP_USER_FILTER', DEFAULT_USER_FILTER).replace('{login}', _escape(login))
+    raw = (username or '').strip()
+    if '@' in raw:
+        user_filter = f'(|{user_filter}(userPrincipalName={_escape(raw)}))'
+    timeout = _timeout()
+    core_attrs = ['sAMAccountName', 'displayName', 'mail', 'userPrincipalName']
+    try:
+        server = _server()
+        svc = ldap3.Connection(server, user=bind_dn, password=_env('LDAP_BIND_PASSWORD'),
+                               auto_bind=True, receive_timeout=timeout)
+        try:
+            found = svc.search(base, user_filter, search_scope=ldap3.SUBTREE,
+                               attributes=core_attrs)
+            if not found or not svc.entries:
+                _log.warning('lookup_user: user not found (login=%s)', login)
+                return None
+            info = _entry_info(svc.entries[0])
+            info['group_sids'] = _fetch_token_groups(svc, info['dn'])
+            return info
+        finally:
+            svc.unbind()
+    except Exception as e:
+        _log.error('lookup_user: LDAP error for login=%s: %s: %s', login, type(e).__name__, e)
+        return None
+
+
+DEFAULT_USER_SEARCH_FILTER = ('(&(objectClass=user)(!(objectClass=computer))'
+                              '(|(sAMAccountName=*{query}*)'
+                              '(userPrincipalName=*{query}*)'
+                              '(displayName=*{query}*)))')
+USER_SEARCH_LIMIT = 50
+
+
+def search_users(query):
+    """Поиск пользователей в каталоге по подстроке имени (для интерфейса
+    добавления). Возвращает список {username, display_name, email, dn}
+    или None при ошибке/отключённом LDAP."""
+    if not is_enabled():
+        return None
+    q = (query or '').strip()
+    if not q:
+        return []
+    try:
+        import ldap3
+    except ImportError:
+        return None
+    user_filter = _env('LDAP_USER_SEARCH_FILTER',
+                       DEFAULT_USER_SEARCH_FILTER).replace('{query}', _escape(q))
+    try:
+        server = _server()
+        conn = ldap3.Connection(server, user=_env('LDAP_BIND_DN') or None,
+                                password=_env('LDAP_BIND_PASSWORD') or None,
+                                auto_bind=True, receive_timeout=_timeout())
+        try:
+            conn.search(_env('LDAP_BASE_DN'), user_filter, search_scope=ldap3.SUBTREE,
+                        attributes=['sAMAccountName', 'displayName', 'mail',
+                                    'userPrincipalName'],
+                        size_limit=USER_SEARCH_LIMIT)
+            res = []
+            for e in conn.entries:
+                def attr(name):
+                    try:
+                        v = e[name].value
+                        return str(v) if v else ''
+                    except Exception:
+                        return ''
+                sam = attr('sAMAccountName') or attr('userPrincipalName').split('@')[0]
+                if not sam:
+                    continue
+                res.append({
+                    'username': sam,
+                    'display_name': attr('displayName'),
+                    'email': attr('mail') or attr('userPrincipalName'),
+                    'dn': e.entry_dn,
+                })
+            return res
+        finally:
+            conn.unbind()
+    except Exception as e:
+        _log.error('search_users: LDAP error for query=%r: %s: %s', query, type(e).__name__, e)
+        return None
+
+
 def _fetch_token_groups(conn, dn):
     """Читает tokenGroups отдельным запросом: не все каталоги отдают этот
     вычисляемый атрибут в обычном поиске. При ошибке возвращает []."""

@@ -835,4 +835,40 @@ check('AD user cannot be removed from AD group (group endpoint)', r.status_code 
 r = anon.delete(f'/api/users/{admin_id}/groups', json={'group_id': admins_gid})
 check('last admin cannot be removed via user endpoint', r.status_code == 400)
 
+# ================= ДОБАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ ИЗ AD =================
+print('== add AD user ==')
+ldap_mod.search_users = lambda q: ([{'username': 'aduser1', 'display_name': 'AD User One',
+                                     'email': 'aduser1@asmnet.ru',
+                                     'dn': 'CN=AD User One,OU=Users,DC=asmnet,DC=ru'}] if q else [])
+
+
+def fake_lookup(u):
+    login = (u.split('@')[0].split('\\')[-1]).lower()
+    if login == 'aduser1':
+        return {'dn': 'CN=AD User One,OU=Users,DC=asmnet,DC=ru', 'username': 'aduser1',
+                'display_name': 'AD User One', 'email': 'aduser1@asmnet.ru',
+                'group_sids': ['S-1-5-21-100']}
+    return None
+
+
+ldap_mod.lookup_user = fake_lookup
+
+r = anon.get('/api/web/ad/users?search=aduser')
+check('ad user search', r.status_code == 200 and len(r.get_json()) == 1)
+r = anon.post('/api/web/ad/users', json={'username': 'aduser1'})
+check('ad user added', r.status_code == 201)
+au = fake_execute_query("SELECT * FROM users WHERE username='aduser1'", fetch_one=True)
+check('ad user provisioned', bool(au) and au['auth_source'] == 'ldap'
+      and au['group_id'] == users_gid and au['nickname'] == 'AD User One')
+gm = fake_execute_query("""SELECT g.name FROM group_members gm JOIN groups g ON g.id=gm.group_id
+    WHERE gm.member_type='user' AND gm.member_id=?""", (au['id'],), fetch_all=True)
+check('ad user memberships synced (Users + AD group)',
+      sorted(x['name'] for x in gm) == ['AD-Разработчики', 'Users'])
+r = anon.post('/api/web/ad/users', json={'username': 'aduser1'})
+check('duplicate ad user rejected', r.status_code == 400)
+r = anon.get('/api/web/ad/users?search=aduser')
+check('added ad user excluded from search', r.get_json() == [])
+r = anon.post('/api/web/ad/users', json={'username': 'ghost'})
+check('unknown ad user rejected', r.status_code == 404)
+
 print(f'\nALL {passed} CHECKS PASSED')

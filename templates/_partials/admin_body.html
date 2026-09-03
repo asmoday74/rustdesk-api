@@ -4,7 +4,10 @@
 <div class="panel">
     <div class="panel-head">
         <h3 data-i18n="users_title">Пользователи</h3>
-        <button class="btn btn-primary" id="addUserBtn"><i class="fas fa-plus"></i> <span data-i18n="add_user">Добавить пользователя</span></button>
+        <div class="panel-head-actions">
+            <button class="btn btn-ghost" id="addAdUserBtn"><i class="fas fa-sitemap"></i> <span data-i18n="add_ad_user">Добавить из AD</span></button>
+            <button class="btn btn-primary" id="addUserBtn"><i class="fas fa-plus"></i> <span data-i18n="add_user">Добавить пользователя</span></button>
+        </div>
     </div>
     <div class="table-wrapper">
         <table class="computers-table">
@@ -56,6 +59,16 @@
             <button type="button" class="btn btn-primary btn-sm" id="addUserGroupBtn" data-i18n="add">Добавить</button>
         </div>
     </div>
+</div></div>
+
+<!-- Модалка добавления пользователя из AD -->
+<div id="adUserModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 data-i18n="add_ad_user">Добавить из AD</h3><button class="close close-aduser-modal">&times;</button></div>
+    <div class="add-member-row">
+        <input type="text" id="adUserSearch" data-i18n-ph="ad_user_search_placeholder" placeholder="Имя пользователя в AD">
+        <button type="button" class="btn btn-primary btn-sm" id="adUserSearchBtn" data-i18n="search">Поиск</button>
+    </div>
+    <div id="adUserResults" class="members-list"></div>
 </div></div>
 
 <!-- Модалка смены пароля -->

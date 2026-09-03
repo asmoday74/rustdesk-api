@@ -128,6 +128,9 @@ ru: {
     primary_group: 'Основная группа',
     ldap_login_locked: 'Логин доменного пользователя управляется AD',
     ad_membership_locked: 'Доменные группы пользователя AD управляются каталогом',
+    add_ad_user: 'Добавить из AD',
+    ad_user_search_placeholder: 'Имя пользователя в AD',
+    ad_user_not_found: 'В AD ничего не найдено',
     // списки устройств (адресная книга)
     tab_address_book: 'Адресная книга',
     tab_collections: 'Коллекции',
@@ -436,6 +439,9 @@ en: {
     primary_group: 'Main group',
     ldap_login_locked: 'Domain username is managed by AD',
     ad_membership_locked: 'AD user domain groups are managed by the directory',
+    add_ad_user: 'Add from AD',
+    ad_user_search_placeholder: 'AD username',
+    ad_user_not_found: 'Nothing found in AD',
     // device lists (address book)
     tab_address_book: 'Address book',
     tab_collections: 'Collections',

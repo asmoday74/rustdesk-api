@@ -311,6 +311,49 @@ def init_auth_routes(app):
             return jsonify({'message': message}), 200
         return jsonify({'error': message}), 400
 
+    # ========== ДОБАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ ИЗ AD ==========
+    @app.route('/api/web/ad/users', methods=['GET'])
+    def web_ad_user_search():
+        """Поиск пользователей в каталоге AD для добавления в систему"""
+        from modules.auth import require_admin, get_all_users
+        auth_check = require_admin(lambda: None)()
+        if isinstance(auth_check, tuple):
+            return auth_check
+        from modules import ldap_auth
+        if not ldap_auth.is_enabled():
+            return jsonify({'error': 'LDAPNotConfigured'}), 400
+        found = ldap_auth.search_users(request.args.get('search', ''))
+        if found is None:
+            return jsonify({'error': 'LDAPError'}), 500
+        added = {(u.get('username') or '').lower() for u in get_all_users()}
+        return jsonify([u for u in found if u['username'].lower() not in added])
+
+    @app.route('/api/web/ad/users', methods=['POST'])
+    def web_ad_user_add():
+        """Добавить пользователя из AD по логину (результату поиска)"""
+        from modules.auth import require_admin, add_audit_log
+        from modules import ldap_auth
+        auth_check = require_admin(lambda: None)()
+        if isinstance(auth_check, tuple):
+            return auth_check
+        body = request.get_json() or {}
+        login = (body.get('username') or '').strip()
+        if not login:
+            return jsonify({'error': 'ParamsError'}), 400
+        if not ldap_auth.is_enabled():
+            return jsonify({'error': 'LDAPNotConfigured'}), 400
+        info = ldap_auth.lookup_user(login)
+        if not info:
+            return jsonify({'error': 'UserNotFoundInAD'}), 404
+        if get_user(info['username']):
+            return jsonify({'error': 'UserAlreadyExists'}), 400
+        user = provision_ldap_user(info)
+        if not user:
+            return jsonify({'error': 'UserAlreadyExists'}), 400
+        add_audit_log(session.get('user_id'), 'ADD_AD_USER', user['username'],
+                      f"AD user added (dn={info.get('dn', '')})", request.remote_addr)
+        return jsonify({'message': 'AD user added', 'id': user['id']}), 201
+
     # ========== НОВЫЙ ЭНДПОИНТ ДЛЯ СМЕНЫ ПАРОЛЯ ==========
     @app.route('/api/users/<int:user_id>/password', methods=['PUT'])
     def change_user_password(user_id):
