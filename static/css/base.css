@@ -81,12 +81,14 @@ a { color: var(--accent); }
 /* ===== Формы ===== */
 .form-group { margin-bottom: 16px; }
 .form-group label { display: block; margin-bottom: 6px; font-size: .83rem; color: var(--muted); }
-.form-group input, .form-group select, .search-input, .search-type-select {
+.form-group input, .form-group select, .search-input, .search-type-select,
+.add-member-row input, .add-member-row select {
     width: 100%; padding: 9px 12px; font: inherit; font-size: .88rem;
     background: var(--input-bg); color: var(--text);
     border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
-.form-group input:focus, .form-group select:focus, .search-input:focus, .search-type-select:focus {
+.form-group input:focus, .form-group select:focus, .search-input:focus, .search-type-select:focus,
+.add-member-row input:focus, .add-member-row select:focus {
     outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
