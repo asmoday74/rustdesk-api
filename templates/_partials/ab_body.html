@@ -96,6 +96,15 @@
     </form>
 </div></div>
 
+<!-- Модалка переименования коллекции -->
+<div id="renameCollectionModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 data-i18n="rename">Переименовать</h3><button class="close" onclick="closeModal('renameCollectionModal')">&times;</button></div>
+    <form onsubmit="submitRenameCollection(event)">
+        <div class="form-group"><label data-i18n="new_name_prompt">Новое имя:</label><input type="text" id="renameCollectionName" required></div>
+        <button type="submit" class="btn btn-primary" data-i18n="save">Сохранить</button>
+    </form>
+</div></div>
+
 <!-- Модалка шаринга -->
 <div id="shareModal" class="modal"><div class="modal-content">
     <div class="modal-header"><h3 id="shareModalTitle" data-i18n="share_title">Общий доступ</h3><button class="close" onclick="closeModal('shareModal')">&times;</button></div>

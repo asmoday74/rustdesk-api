@@ -1,7 +1,7 @@
 <script>
     const IS_ADMIN = {% if is_admin %}true{% else %}false{% endif %};
     let collections=[]; let groupsList=[]; let groupUsers=[]; let currentAb=null; let currentPeers=[]; let currentTags=[];
-    let editingPeer=null; let shareCollection=null; let personalGuid='';
+    let editingPeer=null; let shareCollection=null; let personalGuid=''; let renameCollectionId=null;
     let sessionCheckInterval=null; let activityTimeout=null;
     const RULE_NAMES={1:t('rule_read'),2:t('rule_readwrite'),3:t('rule_full')};
 
@@ -143,9 +143,16 @@
     async function createCollection(e){ e.preventDefault(); const name=newCollectionName.value.trim(); if(!name)return;
         try{ await apiFetch('/api/web/ab/collections',{method:'POST',body:JSON.stringify({name})}); newCollectionName.value='';
             showToast(t('created')); await refreshSelector(); renderCollectionsTab(); }catch(err){showToast(err.message,true);} }
-    async function renameCollection(id,old){ const nw=prompt(t('new_name_prompt'),old); if(!nw||nw===old)return;
-        try{ await apiFetch(`/api/web/ab/collections/${id}`,{method:'PUT',body:JSON.stringify({name:nw})}); showToast(t('renamed'));
-            await refreshSelector(); renderCollectionsTab(); }catch(e){showToast(e.message,true);} }
+    async function renameCollection(id,old){ renameCollectionId=id;
+        document.getElementById('renameCollectionName').value=old||'';
+        openModal('renameCollectionModal'); }
+    async function submitRenameCollection(e){ e.preventDefault();
+        const nw=document.getElementById('renameCollectionName').value.trim();
+        const cur=(collections.find(c=>c.id===renameCollectionId)||{}).name;
+        if(!nw||nw===cur){ closeModal('renameCollectionModal'); return; }
+        try{ await apiFetch(`/api/web/ab/collections/${renameCollectionId}`,{method:'PUT',body:JSON.stringify({name:nw})});
+            showToast(t('renamed')); closeModal('renameCollectionModal');
+            await refreshSelector(); renderCollectionsTab(); }catch(err){showToast(err.message,true);} }
     async function deleteCollection(id,name){ if(!confirm(t('confirm_delete_collection',{name})))return;
         try{ await apiFetch(`/api/web/ab/collections/${id}`,{method:'DELETE'}); showToast(t('deleted'));
             await refreshSelector(); renderCollectionsTab(); }catch(e){showToast(e.message,true);} }
@@ -197,7 +204,7 @@
         document.querySelectorAll('.subnav-btn').forEach(x=>x.classList.remove('active'));
         b.classList.add('active'); showAbSection(b.dataset.abtab); }));
 
-    window.onclick=e=>{ [peerModal,tagsModal,shareModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
+    window.onclick=e=>{ [peerModal,tagsModal,shareModal,renameCollectionModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
 
     loadCollections();
 </script>
