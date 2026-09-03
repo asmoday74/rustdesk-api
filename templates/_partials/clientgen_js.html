@@ -8,7 +8,7 @@
     const OS_ICON={windows:'fab fa-windows', linux:'fab fa-linux', macos:'fab fa-apple', android:'fab fa-android'};
     let configs=[], editCfgId=null, curOs='windows';
     let images={icon:'', logo:''};
-    let originalPassword='', isChangePassActive=false;
+    let originalPassword='', isChangePassActive=false, isRemovePassActive=false;
 
     function fmtDate(d){ if(!d) return '—'; const dt=new Date(d); return isNaN(dt)?'—':dt.toLocaleString(t('locale')); }
     function val(id){ return document.getElementById(id).value; }
@@ -115,6 +115,7 @@
         const passRow=document.getElementById('cgPassRow');
         const changeRow=document.getElementById('cgChangePassRow');
         isChangePassActive=false;
+        isRemovePassActive=false;
         resetPassInput();
         if(editCfgId===null){
             // создание: переключатель + поле пароля
@@ -122,12 +123,15 @@
             changeRow.style.display='none';
             passRow.classList.toggle('show', chk('cgPresetPass'));
         } else {
-            // редактирование: поле скрыто, кнопка «Сменить пароль»
+            // редактирование: поле скрыто, кнопки «Сменить пароль» и (если пароль задан) «Удалить пароль»
             switchRow.style.display='none';
             passRow.classList.remove('show');
             changeRow.style.display='';
             document.getElementById('cgChangePassBtn').style.display='inline-flex';
+            document.getElementById('cgRemovePassBtn').style.display=originalPassword?'inline-flex':'none';
             document.getElementById('cgKeepPassBtn').style.display='none';
+            document.getElementById('cgCancelRemoveBtn').style.display='none';
+            document.getElementById('passRemoveNote').style.display='none';
         }
     }
     function startChangePassword(){
@@ -135,17 +139,36 @@
         resetPassInput();
         document.getElementById('cgPassRow').classList.add('show');
         document.getElementById('cgChangePassBtn').style.display='none';
+        document.getElementById('cgRemovePassBtn').style.display='none';
         document.getElementById('cgKeepPassBtn').style.display='inline-flex';
     }
     function keepOldPassword(){
         isChangePassActive=false;
         document.getElementById('cgPassRow').classList.remove('show');
         document.getElementById('cgChangePassBtn').style.display='inline-flex';
+        document.getElementById('cgRemovePassBtn').style.display=originalPassword?'inline-flex':'none';
         document.getElementById('cgKeepPassBtn').style.display='none';
         resetPassInput();
     }
+    function removePassword(){
+        isRemovePassActive=true;
+        setErr('errPass','');
+        document.getElementById('cgChangePassBtn').style.display='none';
+        document.getElementById('cgRemovePassBtn').style.display='none';
+        document.getElementById('cgCancelRemoveBtn').style.display='inline-flex';
+        document.getElementById('passRemoveNote').style.display='block';
+        applyI18n(document.getElementById('passRemoveNote'));
+    }
+    function cancelRemovePassword(){
+        isRemovePassActive=false;
+        document.getElementById('cgChangePassBtn').style.display='inline-flex';
+        document.getElementById('cgRemovePassBtn').style.display=originalPassword?'inline-flex':'none';
+        document.getElementById('cgCancelRemoveBtn').style.display='none';
+        document.getElementById('passRemoveNote').style.display='none';
+    }
     function collectPermanentPassword(){
         if(editCfgId===null) return chk('cgPresetPass')?val('cgPassValue').trim():'';
+        if(isRemovePassActive) return '';
         return isChangePassActive?val('cgPassValue').trim():originalPassword;
     }
 

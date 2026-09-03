@@ -140,7 +140,10 @@
                 </div>
                 <div class="form-group cg-field" id="cgChangePassRow" style="display:none;margin-bottom:0;">
                     <button type="button" class="btn btn-ghost" id="cgChangePassBtn" onclick="startChangePassword()"><i class="fas fa-key"></i> <span data-i18n="cg_change_pass">Сменить пароль</span></button>
+                    <button type="button" class="btn btn-danger" id="cgRemovePassBtn" style="display:none;" onclick="removePassword()"><i class="fas fa-trash"></i> <span data-i18n="cg_remove_pass">Удалить пароль</span></button>
                     <button type="button" class="btn btn-ghost" id="cgKeepPassBtn" style="display:none;" onclick="keepOldPassword()"><i class="fas fa-undo"></i> <span data-i18n="cg_keep_pass">Оставить старый пароль</span></button>
+                    <button type="button" class="btn btn-ghost" id="cgCancelRemoveBtn" style="display:none;" onclick="cancelRemovePassword()"><i class="fas fa-undo"></i> <span data-i18n="cg_cancel_remove">Отменить удаление</span></button>
+                    <div id="passRemoveNote" style="display:none;color:var(--muted);font-size:.82rem;margin-top:8px;"><i class="fas fa-info-circle"></i> <span data-i18n="cg_pass_will_be_removed">Пароль будет удалён при сохранении</span></div>
                 </div>
             </div>
 

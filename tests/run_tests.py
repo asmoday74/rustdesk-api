@@ -518,6 +518,18 @@ r = anon.post('/api/web/clientgen/configs', json={'name': 'test-cfg', 'config_js
 check('clientgen platform choice', r.status_code == 400)
 r = anon.put(f'/api/web/clientgen/configs/{cid}', json={'name': 'test-cfg2', 'config_json': {**cg_valid, 'platform': 'linux'}})
 check('clientgen update', r.status_code == 200)
+r = anon.put(f'/api/web/clientgen/configs/{cid}', json={'name': 'test-cfg2',
+    'config_json': {**cg_valid, 'platform': 'linux', 'permanentPassword': 'Sekret1'}})
+check('clientgen set password', r.status_code == 200)
+stored = anon.get(f'/api/web/clientgen/configs/{cid}').get_json()
+check('clientgen password stored',
+      json.loads(stored['config_json']).get('permanentPassword') == 'Sekret1')
+r = anon.put(f'/api/web/clientgen/configs/{cid}', json={'name': 'test-cfg2',
+    'config_json': {**cg_valid, 'platform': 'linux', 'permanentPassword': ''}})
+check('clientgen remove password', r.status_code == 200)
+stored = anon.get(f'/api/web/clientgen/configs/{cid}').get_json()
+check('clientgen password removed',
+      json.loads(stored['config_json']).get('permanentPassword') == '')
 r = anon.get(f'/api/web/clientgen/configs/{cid}/status')
 check('clientgen status none', r.status_code == 200 and r.get_json()['build_status'] == 'none')
 r = anon.post(f'/api/web/clientgen/configs/{cid}/build')
