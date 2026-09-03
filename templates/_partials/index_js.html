@@ -4,7 +4,7 @@
     let allComputers = []; let currentPage = 1; let itemsPerPage = 20;
     let autoRefreshInterval = null; let sessionCheckInterval = null; let activityTimeout = null;
     let currentTooltipComputer = null; let isTooltipPinned = false;
-    let currentSort = {column: 'last_online', direction: 'desc'};
+    let currentSort = {column: null, direction: 'asc'};
 
     async function checkSession() {
         try {
@@ -102,6 +102,7 @@
         }
     }
     function sortComputers(list){
+        if(!currentSort.column) return [...list];
         const col=currentSort.column, dir=currentSort.direction==='asc'?1:-1;
         return [...list].sort((a,b)=>{
             const av=sortValue(a,col), bv=sortValue(b,col);
