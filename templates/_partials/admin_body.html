@@ -11,29 +11,42 @@
             <thead><tr>
                 <th>ID</th>
                 <th data-i18n="login_label">Логин</th>
-                <th data-i18n="role">Роль</th>
-                <th data-i18n="group">Группа</th>
+                <th data-i18n="display_name_label">Имя</th>
+                <th data-i18n="col_groups">Группы</th>
+                <th data-i18n="primary_group">Первичная группа</th>
                 <th>Email</th>
                 <th data-i18n="created_at">Создан</th>
                 <th data-i18n="col_actions">Действия</th>
             </tr></thead>
-            <tbody id="usersTableBody"><tr><td colspan="7" class="empty-state" data-i18n="loading">Загрузка...</td></tr></tbody>
+            <tbody id="usersTableBody"><tr><td colspan="8" class="empty-state" data-i18n="loading">Загрузка...</td></tr></tbody>
         </table>
     </div>
 </div>
 
 </section>
 
-<!-- Модалка пользователя -->
+<!-- Модалка добавления пользователя -->
 <div id="userModal" class="modal"><div class="modal-content">
     <div class="modal-header"><h3 data-i18n="add_user">Добавить пользователя</h3><button class="close">&times;</button></div>
     <form id="addUserForm">
         <div class="form-group"><label><span data-i18n="login_label">Логин</span> *</label><input type="text" id="newUsername" required></div>
         <div class="form-group"><label><span data-i18n="password_label">Пароль</span> *</label><input type="password" id="newPassword" required></div>
-        <div class="form-group"><label data-i18n="role">Роль</label><select id="newRole"><option value="user" data-i18n="role_user">Пользователь</option><option value="admin" data-i18n="role_admin">Администратор</option></select></div>
-        <div class="form-group"><label data-i18n="group">Группа</label><select id="newGroup"></select></div>
+        <div class="form-group"><label data-i18n="display_name_label">Имя</label><input type="text" id="newNickname"></div>
+        <div class="form-group"><label data-i18n="primary_group">Первичная группа</label><select id="newGroup"></select></div>
         <div class="form-group"><label>Email</label><input type="email" id="newEmail"></div>
         <button type="submit" class="btn btn-primary" data-i18n="create">Создать</button>
+    </form>
+</div></div>
+
+<!-- Модалка редактирования пользователя -->
+<div id="editUserModal" class="modal"><div class="modal-content">
+    <div class="modal-header"><h3 data-i18n="edit_user">Редактировать пользователя</h3><button class="close close-edituser-modal">&times;</button></div>
+    <form id="editUserForm">
+        <div class="form-group"><label data-i18n="login_label">Логин</label><input type="text" id="editUsername"></div>
+        <div class="form-group"><label data-i18n="display_name_label">Имя</label><input type="text" id="editNickname"></div>
+        <div class="form-group"><label data-i18n="primary_group">Первичная группа</label><select id="editGroup"></select></div>
+        <div class="form-group"><label>Email</label><input type="email" id="editEmail"></div>
+        <button type="submit" class="btn btn-primary" data-i18n="save">Сохранить</button>
     </form>
 </div></div>
 

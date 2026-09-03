@@ -190,12 +190,13 @@ def init_db():
         """)
         
         # Создаем таблицу users
+        # Права администратора задаются членством во встроенной группе
+        # Administrators — колонки ролей нет.
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                role TEXT DEFAULT 'user',
                 email TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 last_login TIMESTAMPTZ
@@ -433,13 +434,14 @@ def init_db():
             from modules.auth import hash_password
             admin_password = hash_password('admin')
             execute_query("""
-                INSERT INTO users (username, password_hash, role, group_id)
-                VALUES (%s, %s, 'admin', 1)
+                INSERT INTO users (username, password_hash, group_id)
+                VALUES (%s, %s, 1)
             """, ('admin', admin_password))
             db_logger.info("Created default admin user: admin / admin")
 
         # Встроенные локальные группы: Users (пустая) и Administrators.
-        # Administrators включает всех пользователей с ролью admin и группу Users.
+        # Administrators включает группу Users; права администратора даёт
+        # прямое членство пользователя в Administrators.
         users_group = execute_query('SELECT id FROM groups WHERE builtin = 1', fetch_one=True)
         if not users_group:
             execute_query(
@@ -453,14 +455,40 @@ def init_db():
             admins_group = execute_query('SELECT id FROM groups WHERE builtin = 2', fetch_one=True)
             db_logger.info("Created builtin group Administrators")
         if users_group and admins_group:
-            for a in execute_query("SELECT id FROM users WHERE role = 'admin'", fetch_all=True) or []:
-                execute_query("""
-                    INSERT INTO group_members (group_id, member_type, member_id)
-                    SELECT %s, 'user', %s WHERE NOT EXISTS (
-                        SELECT 1 FROM group_members
-                        WHERE group_id = %s AND member_type = 'user' AND member_id = %s
-                    )
-                """, (admins_group['id'], a['id'], admins_group['id'], a['id']))
+            # Миграция с ролевой модели: всех role='admin' — в Administrators,
+            # затем колонка role удаляется. На новых установках колонки нет —
+            # блок просто пропускается.
+            try:
+                legacy = execute_query(
+                    "SELECT id FROM users WHERE role = 'admin'", fetch_all=True) or []
+                for a in legacy:
+                    execute_query("""
+                        INSERT INTO group_members (group_id, member_type, member_id)
+                        SELECT %s, 'user', %s WHERE NOT EXISTS (
+                            SELECT 1 FROM group_members
+                            WHERE group_id = %s AND member_type = 'user' AND member_id = %s
+                        )
+                    """, (admins_group['id'], a['id'], admins_group['id'], a['id']))
+                execute_query('ALTER TABLE users DROP COLUMN role')
+                db_logger.info("Role migration done: %d admin(s) moved to Administrators", len(legacy))
+            except Exception:
+                pass  # колонка role уже удалена
+            # Страховка от потери доступа: если в Administrators не осталось
+            # ни одного пользователя, возвращаем служебного admin.
+            has_user_member = execute_query("""
+                SELECT 1 FROM group_members
+                WHERE group_id = %s AND member_type = 'user'
+            """, (admins_group['id'],), fetch_one=True)
+            if not has_user_member:
+                admin = get_user_by_username('admin')
+                if admin:
+                    execute_query("""
+                        INSERT INTO group_members (group_id, member_type, member_id)
+                        SELECT %s, 'user', %s WHERE NOT EXISTS (
+                            SELECT 1 FROM group_members
+                            WHERE group_id = %s AND member_type = 'user' AND member_id = %s
+                        )
+                    """, (admins_group['id'], admin['id'], admins_group['id'], admin['id']))
             execute_query("""
                 INSERT INTO group_members (group_id, member_type, member_id)
                 SELECT %s, 'group', %s WHERE NOT EXISTS (
@@ -644,11 +672,11 @@ def get_user_by_username(username):
 
 def get_all_users():
     return execute_query(
-        'SELECT id, username, role, email, group_id, auth_source, created_at, last_login FROM users',
+        'SELECT id, username, email, group_id, auth_source, created_at, last_login FROM users',
         fetch_all=True
     )
 
-def create_user(username, password, role='user', email=None, group_id=1):
+def create_user(username, password, email=None, group_id=1):
     existing = get_user_by_username(username)
     if existing:
         return False, 'Username already exists'
@@ -656,27 +684,19 @@ def create_user(username, password, role='user', email=None, group_id=1):
     from modules.auth import hash_password
     password_hash = hash_password(password)
     execute_query("""
-        INSERT INTO users (username, password_hash, role, email, group_id)
-        VALUES (%s, %s, %s, %s, %s)
-    """, (username, password_hash, role, email, group_id or 1))
+        INSERT INTO users (username, password_hash, email, group_id)
+        VALUES (%s, %s, %s, %s)
+    """, (username, password_hash, email, group_id or 1))
     return True, 'User created'
 
 def delete_user(user_id):
-    admin_count = execute_query(
-        'SELECT COUNT(*) as count FROM users WHERE role = %s',
-        ('admin',),
-        fetch_one=True
-    )
-    user = execute_query(
-        'SELECT role FROM users WHERE id = %s',
-        (user_id,),
-        fetch_one=True
-    )
-    
-    if user and user.get('role') == 'admin' and admin_count and admin_count.get('count', 0) <= 1:
-        return False, 'Cannot delete the last admin user'
-    
+    from modules import groups
+    user = execute_query('SELECT id FROM users WHERE id = %s', (user_id,), fetch_one=True)
+    if user and groups.is_last_admin_user(user_id):
+        return False, 'Cannot delete the last administrator'
+
     execute_query('DELETE FROM users WHERE id = %s', (user_id,))
+    groups.remove_user_memberships(user_id)
     return True, 'User deleted'
 
 def update_user_last_login(user_id):

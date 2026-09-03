@@ -726,6 +726,11 @@ def init_ab_routes(app):
         body = _parse_json_body() or {}
         if body.get('member_type') not in (gr.MEMBER_USER, gr.MEMBER_GROUP) or not body.get('member_id'):
             return _error('ParamsError')
+        g = gr.group_info_by_id(group_id)
+        if g and g.get('builtin') == gr.BUILTIN_ADMINS \
+                and body['member_type'] == gr.MEMBER_USER \
+                and gr.is_last_admin_user(body['member_id']):
+            return _error('Cannot remove the last administrator')
         gr.remove_member(group_id, body['member_type'], body['member_id'])
         return jsonify({'message': 'Member removed'})
 

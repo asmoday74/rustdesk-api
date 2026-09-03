@@ -319,7 +319,7 @@ check('collection peers', r.get_json()['total'] == 1)
 # ================= ВТОРОЙ ПОЛЬЗОВАТЕЛЬ + ПРАВИЛА =================
 print('== second user + sharing rules ==')
 from modules.auth import create_user  # noqa: E402
-ok, msg = create_user('user2', 'pass1234', 'user')
+ok, msg = create_user('user2', 'pass1234')
 check('create user2', ok, msg)
 r = client.post('/api/login', json={'username': 'user2', 'password': 'pass1234', 'uuid': 'uuid-2', 'id': 'dev-2'})
 check('user2 client login', r.status_code == 200)
@@ -401,9 +401,9 @@ r = client.post('/api/web/groups', json={'name': 'Bad', 'type': 9})
 check('group invalid type rejected', r.status_code == 400)
 
 cu = create_user
-cu('alice', 'pass1234', 'user', None, grp_shared)
-cu('bob', 'pass1234', 'user', None, grp_shared)
-cu('carol', 'pass1234', 'user', None, grp_default)
+cu('alice', 'pass1234', None, grp_shared)
+cu('bob', 'pass1234', None, grp_shared)
+cu('carol', 'pass1234', None, grp_default)
 alice_id = fake_execute_query("SELECT id FROM users WHERE username='alice'", fetch_one=True)['id']
 bob_id = fake_execute_query("SELECT id FROM users WHERE username='bob'", fetch_one=True)['id']
 carol_id = fake_execute_query("SELECT id FROM users WHERE username='carol'", fetch_one=True)['id']
@@ -624,7 +624,7 @@ check('container member sees container collection', any(p['guid'] == col_d['guid
 
 # ================= ПРАВА АДМИНИСТРАТОРА ЧЕРЕЗ ГРУППУ =================
 print('== admin rights via Administrators group ==')
-cu('dave', 'pass1234', 'user', None, users_gid)
+cu('dave', 'pass1234', None, users_gid)
 dave_id = fake_execute_query("SELECT id FROM users WHERE username='dave'", fetch_one=True)['id']
 anon.post(f'/api/web/groups/{admins_gid}/members', json={'member_type': 'user', 'member_id': dave_id})
 dc = flask_app.test_client()
@@ -748,5 +748,46 @@ r = client.post(f"/api/ab/peer/add/{col_c2['guid']}", headers=HC,
 check('read-write add peer', r.status_code == 200)
 r = client.delete(f"/api/ab/peer/{col_c2['guid']}", headers=HC, json=['rw-1'])
 check('read-write delete peer', r.status_code == 200, r.data)
+
+# ================= РОЛИ: МИГРАЦИЯ И ЗАЩИТА ПОСЛЕДНЕГО АДМИНА =================
+print('== role migration & last admin protection ==')
+fake_execute_query("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'")
+fake_execute_query("UPDATE users SET role='admin' WHERE username='dave'")
+check('re-init_db with legacy role column', database.init_db())
+dave_row = fake_execute_query("SELECT * FROM users WHERE username='dave'", fetch_one=True)
+check('role column dropped by migration', 'role' not in dave_row)
+gm = fake_execute_query("""SELECT 1 FROM group_members gm JOIN groups g ON g.id=gm.group_id
+    WHERE gm.member_type='user' AND gm.member_id=? AND g.builtin=2""", (dave_id,), fetch_one=True)
+check('role admin migrated to Administrators', bool(gm))
+r = anon.delete(f'/api/web/groups/{admins_gid}/members',
+                json={'member_type': 'user', 'member_id': dave_id})
+check('second admin removed from Administrators', r.status_code == 200)
+admin_id = fake_execute_query("SELECT id FROM users WHERE username='admin'", fetch_one=True)['id']
+r = anon.delete(f'/api/web/groups/{admins_gid}/members',
+                json={'member_type': 'user', 'member_id': admin_id})
+check('last admin cannot be removed from group', r.status_code == 400)
+r = anon.delete(f'/api/users/{admin_id}')
+check('last admin cannot be deleted', r.status_code == 400)
+
+# ================= РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ =================
+print('== user editing ==')
+r = anon.put(f'/api/users/{carol_id}',
+             json={'nickname': 'Кэрол Тест', 'email': 'carol@x.ru', 'group_id': users_gid})
+check('user edit', r.status_code == 200)
+row = fake_execute_query('SELECT * FROM users WHERE id=?', (carol_id,), fetch_one=True)
+check('user edit applied', row['nickname'] == 'Кэрол Тест' and row['email'] == 'carol@x.ru'
+      and row['group_id'] == users_gid)
+r = anon.put(f'/api/users/{bob_id}', json={'username': 'bobby'})
+check('local user rename', r.status_code == 200)
+r = client.post('/api/login', json={'username': 'bobby', 'password': 'pass1234',
+                                    'uuid': 'uuid-b3', 'id': 'dev-b3'})
+check('login with new username', r.status_code == 200)
+r = anon.put(f'/api/users/{bob_id}', json={'username': 'carol'})
+check('rename to existing username rejected', r.status_code == 400)
+jr = fake_execute_query("SELECT * FROM users WHERE username='jsmith'", fetch_one=True)
+r = anon.put(f"/api/users/{jr['id']}", json={'username': 'jsmith2'})
+check('ldap username change rejected', r.status_code == 400)
+r = anon.put(f"/api/users/{jr['id']}", json={'nickname': 'John D.', 'email': 'j@asmnet.ru'})
+check('ldap other fields editable', r.status_code == 200)
 
 print(f'\nALL {passed} CHECKS PASSED')

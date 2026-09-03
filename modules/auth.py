@@ -83,10 +83,27 @@ def require_admin(f):
     return decorated_function
 
 def get_all_users():
+    """Пользователи для админ-панели: данные + прямые членства в группах"""
     from modules.database import execute_query
-    return execute_query('SELECT id, username, role, email, group_id, auth_source, created_at, last_login FROM users', fetch_all=True)
+    users = execute_query(
+        'SELECT id, username, nickname, email, group_id, auth_source, created_at, last_login FROM users',
+        fetch_all=True) or []
+    memberships = execute_query("""
+        SELECT gm.member_id AS user_id, g.name AS group_name, g.builtin AS builtin
+        FROM group_members gm
+        JOIN groups g ON g.id = gm.group_id
+        WHERE gm.member_type = 'user'
+    """, fetch_all=True) or []
+    by_user = {}
+    for m in memberships:
+        by_user.setdefault(m['user_id'], []).append(m)
+    for u in users:
+        ms = by_user.get(u['id'], [])
+        u['groups'] = sorted(m['group_name'] for m in ms)
+        u['is_admin'] = any(m['builtin'] == 2 for m in ms)
+    return users
 
-def create_user(username, password, role='user', email=None, group_id=1):
+def create_user(username, password, email=None, group_id=1, nickname=''):
     from modules.database import execute_query, get_user_by_username
     existing = get_user_by_username(username)
     if existing:
@@ -94,25 +111,20 @@ def create_user(username, password, role='user', email=None, group_id=1):
 
     password_hash = hash_password(password)
     execute_query("""
-        INSERT INTO users (username, password_hash, role, email, group_id)
+        INSERT INTO users (username, password_hash, email, group_id, nickname)
         VALUES (%s, %s, %s, %s, %s)
-    """, (username, password_hash, role, email, group_id or 1))
-    if role == 'admin':
-        from modules import groups
-        created = get_user_by_username(username)
-        if created:
-            groups.add_admin_membership(created['id'])
+    """, (username, password_hash, email, group_id or 1, nickname or ''))
     return True, 'User created'
 
 def delete_user(user_id):
     from modules.database import execute_query
-    admin_count = execute_query('SELECT COUNT(*) as count FROM users WHERE role = %s', ('admin',), fetch_one=True)
-    user = execute_query('SELECT role FROM users WHERE id = %s', (user_id,), fetch_one=True)
-    
-    if user and user.get('role') == 'admin' and admin_count and admin_count.get('count', 0) <= 1:
-        return False, 'Cannot delete the last admin user'
-    
+    from modules import groups
+    user = execute_query('SELECT id FROM users WHERE id = %s', (user_id,), fetch_one=True)
+    if user and groups.is_last_admin_user(user_id):
+        return False, 'Cannot delete the last administrator'
+
     execute_query('DELETE FROM users WHERE id = %s', (user_id,))
+    groups.remove_user_memberships(user_id)
     return True, 'User deleted'
 
 def update_user_last_login(user_id):

@@ -7,7 +7,7 @@
 Users права группы Administrators НЕ наследует.
 
 Права администратора (доступ к админ-панели) даёт только ПРЯМОЕ членство
-пользователя во встроенной группе Administrators (или role='admin');
+пользователя во встроенной группе Administrators (ролей в системе нет);
 вложенность групп на это не распространяется.
 """
 from modules.database import execute_query
@@ -225,17 +225,37 @@ def user_effective_group_ids(user_id):
 
 
 def is_admin_user(user):
-    """Права администратора: role='admin' или прямое членство в Administrators"""
+    """Права администратора: только прямое членство в группе Administrators"""
     if not user:
         return False
-    if user.get('role') == 'admin':
-        return True
     row = execute_query("""
         SELECT 1 FROM group_members gm
         JOIN groups g ON g.id = gm.group_id
         WHERE gm.member_type = %s AND gm.member_id = %s AND g.builtin = %s
     """, (MEMBER_USER, user['id'], BUILTIN_ADMINS), fetch_one=True)
     return bool(row)
+
+
+def admin_member_count():
+    """Количество пользователей — прямых членов группы Administrators"""
+    row = execute_query("""
+        SELECT COUNT(*) AS cnt FROM group_members gm
+        JOIN groups g ON g.id = gm.group_id
+        WHERE gm.member_type = %s AND g.builtin = %s
+    """, (MEMBER_USER, BUILTIN_ADMINS), fetch_one=True)
+    return (row or {}).get('cnt', 0)
+
+
+def is_last_admin_user(user_id):
+    """Пользователь — последний прямой член группы Administrators"""
+    if not user_id:
+        return False
+    row = execute_query("""
+        SELECT 1 FROM group_members gm
+        JOIN groups g ON g.id = gm.group_id
+        WHERE gm.member_type = %s AND gm.member_id = %s AND g.builtin = %s
+    """, (MEMBER_USER, user_id, BUILTIN_ADMINS), fetch_one=True)
+    return bool(row) and admin_member_count() <= 1
 
 
 def add_admin_membership(user_id):

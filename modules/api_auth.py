@@ -28,9 +28,9 @@ def provision_ldap_user(info):
         users_group = gr.get_builtin_group(gr.BUILTIN_USERS)
         primary_gid = users_group['id'] if users_group else 1
         execute_query("""
-            INSERT INTO users (username, password_hash, role, email, group_id,
+            INSERT INTO users (username, password_hash, email, group_id,
                                auth_source, ldap_dn, nickname)
-            VALUES (%s, %s, 'user', %s, %s, 'ldap', %s, %s)
+            VALUES (%s, %s, %s, %s, 'ldap', %s, %s)
         """, (username, secrets.token_hex(32), info.get('email') or None,
               primary_gid, info.get('dn') or '', info.get('display_name') or ''))
         user = get_user(username)
@@ -90,7 +90,7 @@ def init_auth_routes(app):
             session['user_id'] = user['id']
             session['username'] = user['username']
             from modules import groups as gr
-            session['role'] = 'admin' if gr.is_admin_user(user) else (user.get('role') or 'user')
+            session['role'] = 'admin' if gr.is_admin_user(user) else 'user'
             session['login_time'] = datetime.now().isoformat()
             session['last_activity'] = datetime.now().isoformat()
 
@@ -188,12 +188,64 @@ def init_auth_routes(app):
         
         data = request.get_json()
         success, message = create_user(data.get('username'), data.get('password'),
-                                       data.get('role', 'user'), data.get('email'),
-                                       data.get('group_id', 1))
+                                       data.get('email'), data.get('group_id', 1),
+                                       data.get('nickname') or '')
         if success:
             add_audit_log(session.get('user_id'), 'CREATE_USER', data.get('username'), message, request.remote_addr)
             return jsonify({'message': message}), 201
         return jsonify({'error': message}), 400
+    
+    @app.route('/api/users/<int:user_id>', methods=['PUT'])
+    def update_user(user_id):
+        """Редактирование пользователя (только администратор).
+        У доменных пользователей логин неизменяем — это ключ синхронизации с AD."""
+        from modules.auth import require_admin, add_audit_log
+        from modules import groups as gr
+        auth_check = require_admin(lambda: None)()
+        if isinstance(auth_check, tuple):
+            return auth_check
+
+        data = request.get_json() or {}
+        user = get_user_by_id(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        is_ldap = user.get('auth_source', 'local') != 'local'
+
+        sets, params = [], []
+        username = data.get('username')
+        if username is not None:
+            username = str(username).strip()
+            if not username:
+                return jsonify({'error': 'Username cannot be empty'}), 400
+            if username != user['username']:
+                if is_ldap:
+                    return jsonify({'error': 'Domain username cannot be changed'}), 400
+                if get_user(username):
+                    return jsonify({'error': 'Username already exists'}), 400
+                sets.append('username = %s')
+                params.append(username)
+        nickname = data.get('nickname')
+        if nickname is not None:
+            sets.append('nickname = %s')
+            params.append(str(nickname).strip())
+        email = data.get('email')
+        if email is not None:
+            sets.append('email = %s')
+            params.append(str(email).strip() or None)
+        group_id = data.get('group_id')
+        if group_id is not None:
+            if not gr.group_info_by_id(group_id):
+                return jsonify({'error': 'Group not found'}), 400
+            sets.append('group_id = %s')
+            params.append(group_id)
+
+        if not sets:
+            return jsonify({'message': 'Nothing to update'}), 200
+        params.append(user_id)
+        execute_query(f"UPDATE users SET {', '.join(sets)} WHERE id = %s", tuple(params))
+        add_audit_log(session.get('user_id'), 'UPDATE_USER',
+                      username or user['username'], 'User updated', request.remote_addr)
+        return jsonify({'message': 'User updated'}), 200
     
     @app.route('/api/users/<int:user_id>', methods=['DELETE'])
     def remove_user(user_id):

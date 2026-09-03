@@ -1,5 +1,5 @@
 <script>
-    let allGroups=[]; let allUsersList=[]; let currentUserId=null;
+    let allGroups=[]; let allUsersList=[]; let currentUserId=null; let editingUserId=null;
     let sessionCheckInterval=null; let activityTimeout=null;
 
     async function checkSession(){ try{ const r=await fetch('/api/session/check'); const d=await r.json();
@@ -16,49 +16,82 @@
     function formatDate(d){ if(!d)return t('never'); const dt=new Date(d); if(isNaN(dt))return t('never');
         const diff=(new Date()-dt)/1000; if(diff<60)return t('just_now'); if(diff<3600)return t('mins_ago',{n:Math.floor(diff/60)}); if(diff<86400)return t('hours_ago',{n:Math.floor(diff/3600)});
         return dt.toLocaleString(t('locale')); }
+    async function apiFetch(url,opt={}){ const r=await fetch(url,{headers:{'Content-Type':'application/json'},...opt});
+        if(!r.ok){ let m=t('error')+' '+r.status; try{ const d=await r.json(); if(d.error)m=d.error; }catch(e){} throw new Error(m); }
+        const tx=await r.text(); return tx?JSON.parse(tx):null; }
 
     // ================= ПОЛЬЗОВАТЕЛИ =================
     async function loadGroups(){ try{ const r=await fetch('/api/web/groups'); if(r.ok){ allGroups=await r.json(); fillGroupSelects(); } }catch(e){} }
-    function fillGroupSelects(){ const s=document.getElementById('newGroup');
-        s.innerHTML=allGroups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join(''); }
+    function fillGroupSelects(){ const opts=allGroups.map(g=>`<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('');
+        document.getElementById('newGroup').innerHTML=opts;
+        document.getElementById('editGroup').innerHTML=opts; }
 
     async function loadUsers(){ try{ const r=await fetch('/api/users'); if(!r.ok)return; const users=await r.json();
         allUsersList=users;
         const tb=document.getElementById('usersTableBody');
-        if(!users.length){ tb.innerHTML=`<tr><td colspan="7" class="empty-state">${t('no_users')}</td></tr>`; return; }
+        if(!users.length){ tb.innerHTML=`<tr><td colspan="8" class="empty-state">${t('no_users')}</td></tr>`; return; }
         tb.innerHTML=users.map(u=>{ const g=allGroups.find(x=>x.id===u.group_id);
             const isLdap=(u.auth_source||'local')!=='local';
-            return `<tr><td>${u.id}</td><td><b>${escapeHtml(u.username)}</b>${isLdap?` <span class="tag-badge">${t('group_source_ad')}</span>`:''}</td>
-            <td>${u.role==='admin'?`<span class="tag-badge">${t('role_admin_short')}</span>`:t('role_user')}</td>
+            const groups=(u.groups||[]).join(', ');
+            return `<tr><td>${u.id}</td>
+            <td><b>${escapeHtml(u.username)}</b>${isLdap?` <span class="tag-badge">${t('group_source_ad')}</span>`:''}</td>
+            <td>${escapeHtml(u.nickname||'—')}</td>
+            <td><span class="cell-ellipsis" title="${escapeHtml(groups)}">${u.is_admin?`<span class="tag-badge">${t('role_admin_short')}</span> `:''}${groups?escapeHtml(groups):'—'}</span></td>
             <td>${escapeHtml(g?g.name:'-')}</td><td>${escapeHtml(u.email||'-')}</td><td>${formatDate(u.created_at)}</td>
             <td><div class="action-cell">
+                <button class="btn btn-warn btn-sm" data-i18n-title="edit" onclick="openEditUserModal(${u.id})"><i class="fas fa-edit"></i></button>
                 ${isLdap?'':`<button class="btn btn-warn btn-sm" data-i18n-title="change_password" onclick="openPasswordModal(${u.id},'${escapeHtml(u.username)}')"><i class="fas fa-key"></i></button>`}
                 <button class="btn btn-danger btn-sm" data-i18n-title="delete_user" onclick="deleteUser(${u.id},'${escapeHtml(u.username)}')"><i class="fas fa-trash"></i></button>
             </div></td></tr>`; }).join('');
         applyI18n(tb); }catch(e){} }
 
     async function deleteUser(id,name){ if(!confirm(t('confirm_delete_user',{name})))return;
-        const r=await fetch(`/api/users/${id}`,{method:'DELETE'}); if(r.ok){showToast(t('user_deleted'));loadUsers();} else showToast(t('error'),true); }
+        try{ await apiFetch(`/api/users/${id}`,{method:'DELETE'}); showToast(t('user_deleted')); await Promise.all([loadUsers(),loadGroups()]); }
+        catch(e){ showToast(e.message,true); } }
 
-    // ================= МОДАЛКИ ПОЛЬЗОВАТЕЛЯ =================
+    // ================= ДОБАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯ =================
     const userModal=document.getElementById('userModal');
     document.getElementById('addUserBtn').onclick=()=>{ userModal.classList.add('active'); };
     userModal.querySelector('.close').onclick=()=>userModal.classList.remove('active');
     document.getElementById('addUserForm').addEventListener('submit', async e=>{ e.preventDefault();
-        const data={username:newUsername.value,password:newPassword.value,role:newRole.value,email:newEmail.value,group_id:parseInt(newGroup.value||'1')};
+        const data={username:newUsername.value,password:newPassword.value,nickname:newNickname.value.trim(),
+                    email:newEmail.value,group_id:parseInt(newGroup.value||'1')};
         const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
         if(r.ok){ showToast(t('user_created')); userModal.classList.remove('active'); e.target.reset(); loadUsers(); } else { const d=await r.json(); showToast(d.error||t('error'),true); } });
 
+    // ================= РЕДАКТИРОВАНИЕ ПОЛЬЗОВАТЕЛЯ =================
+    const editUserModal=document.getElementById('editUserModal');
+    function openEditUserModal(id){ const u=allUsersList.find(x=>x.id===id); if(!u)return;
+        editingUserId=id;
+        const isLdap=(u.auth_source||'local')!=='local';
+        editUsername.value=u.username||''; editUsername.disabled=isLdap;
+        editUsername.title=isLdap?t('ldap_login_locked'):'';
+        editNickname.value=u.nickname||'';
+        editEmail.value=u.email||'';
+        editGroup.value=String(u.group_id||1);
+        editUserModal.classList.add('active'); }
+    editUserModal.querySelector('.close-edituser-modal').onclick=()=>editUserModal.classList.remove('active');
+    document.getElementById('editUserForm').addEventListener('submit', async e=>{ e.preventDefault();
+        if(!editingUserId)return;
+        const body={nickname:editNickname.value.trim(), email:editEmail.value.trim(),
+                    group_id:parseInt(editGroup.value||'1')};
+        if(!editUsername.disabled) body.username=editUsername.value.trim();
+        try{ await apiFetch(`/api/users/${editingUserId}`,{method:'PUT',body:JSON.stringify(body)});
+            showToast(t('user_updated')); editUserModal.classList.remove('active'); await loadUsers(); }
+        catch(err){ showToast(err.message,true); } });
+
+    // ================= СМЕНА ПАРОЛЯ =================
     const passwordModal=document.getElementById('passwordModal');
     function openPasswordModal(id,name){ currentUserId=id; passwordUser.value=name; newPasswordField.value=''; confirmPasswordField.value=''; passwordModal.classList.add('active'); }
     passwordModal.querySelector('.close-password-modal').onclick=()=>passwordModal.classList.remove('active');
     document.getElementById('passwordForm').addEventListener('submit', async e=>{ e.preventDefault();
         if(newPasswordField.value.length<4){showToast(t('password_min_len'),true);return;}
         if(newPasswordField.value!==confirmPasswordField.value){showToast(t('passwords_mismatch'),true);return;}
-        const r=await fetch(`/api/users/${currentUserId}/password`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({new_password:newPasswordField.value})});
-        if(r.ok){ showToast(t('password_changed')); passwordModal.classList.remove('active'); } else showToast(t('error'),true); });
+        try{ await apiFetch(`/api/users/${currentUserId}/password`,{method:'PUT',body:JSON.stringify({new_password:newPasswordField.value})});
+            showToast(t('password_changed')); passwordModal.classList.remove('active'); }
+        catch(err){ showToast(err.message,true); } });
 
-    window.onclick=e=>{ [userModal,passwordModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
+    window.onclick=e=>{ [userModal,editUserModal,passwordModal].forEach(m=>{ if(e.target===m) m.classList.remove('active'); }); };
 
     (async()=>{ await loadGroups(); loadUsers(); })();
 </script>
